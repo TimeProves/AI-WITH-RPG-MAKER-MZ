@@ -34,6 +34,12 @@ Feature: AI RPG Maker workbench local smoke behaviors
     Then the asset library should list at least one image file
     And the asset library should expose owner choices for NPCs, actors, and items
 
+  Scenario: Image API route returns a structured dry-run preview
+    Given a generated city skeleton exists
+    When I send a dry-run image generation request
+    Then the response should include the requested asset kind and target file name
+    And the response should remain side-effect free
+
   Scenario: Saving asset bindings updates project data
     Given a generated city skeleton exists
     When I bind a face asset to actor 1

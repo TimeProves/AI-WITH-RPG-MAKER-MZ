@@ -11,6 +11,7 @@ AI workbench for RPG Maker MZ with:
 - drag-and-drop NPC relocation between maps and submaps
 - a visual stage editor for conditional NPC dialogue states
 - an asset library for browsing local project images and binding them to actors, NPCs, and items
+- a provider-agnostic image-generation API placeholder with direct save-to-project paths
 - a Database Studio for actors, items, weapons, armors, and skills
 - an Event Composer for reusable event templates and conditioned map events
 - NPC profile and quest-state generation
@@ -55,6 +56,7 @@ Both launchers will:
 - drag NPCs between maps in the tree or change their target map in the editor
 - edit background, placement, movement, tracked states, and dialogue stages
 - browse discovered project art in the asset library and bind it to actors, NPCs, or items
+- draft a real image-generation request, save the result into project asset folders, and then bind it when an image provider is configured
 - load Database Studio to edit actor backgrounds, items, equipment, and skills
 - use Event Composer to draft and apply simple conditioned event templates
 - preview generated content before writing it into the project
@@ -80,6 +82,8 @@ Both launchers will:
 - [x] Visual stage editor for conditional NPC dialogue states
 - [x] Asset library for scanning `img/faces`, `img/characters`, `img/pictures`, `img/sv_actors`, and `img/parallaxes`
 - [x] Asset preview for the currently selected project image
+- [x] Provider-agnostic image generation API placeholder route and workbench panel
+- [x] Saving generated images directly into the correct RPG Maker asset folder when an image provider is configured
 - [x] Binding an existing or imported local image to an actor, NPC, item, weapon, armor, or skill
 - [x] Persisting asset ownership in `AiAssetBindings.json`
 - [x] Database Studio for editing actors, items, weapons, armors, and skills
@@ -95,7 +99,7 @@ Both launchers will:
 
 ## Not Supported Yet
 
-- [ ] Real image generation API integration that creates final art inside the workbench
+- [ ] A built-in image provider bundle; you still need to configure your own image endpoint and key
 - [ ] Inpainting, outpainting, or direct AI editing of existing art assets
 - [ ] Voice input or speech-to-text for player dialogue
 - [ ] NPC voice output or text-to-speech
@@ -149,7 +153,8 @@ node "C:\Program Files (x86)\Steam\steamapps\common\RPG Maker MZ\tools\ai-rpg-ma
 
 - Text workflow is connected end to end
 - Image prompt generation, asset browsing, asset previews, and local asset binding are supported
+- A provider-agnostic image API layer is now reserved; once configured, it can save generated files straight into RPG Maker image folders
 - Actor, item, equipment, and skill editing are supported inside the local workbench
 - Reusable event template generation and apply flows are supported for common map-event patterns
-- A real image API is not wired yet, so final image creation still depends on an external provider or manually supplied files
+- Final image creation still depends on an external provider that you configure yourself
 - The workflow extends project data and plugins instead of patching the RPG Maker editor itself

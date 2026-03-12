@@ -857,6 +857,50 @@
             </section>
 
             <section class="editor-section">
+              <h3>Image Generation API</h3>
+              <div class="field">
+                <label for="imagePromptInput">Image Prompt</label>
+                <textarea id="imagePromptInput" placeholder="Example: A full-body gothic strapless evening dress portrait for the heroine, elegant black satin, lace gloves, candlelit ballroom mood, RPG fantasy illustration."></textarea>
+              </div>
+              <div class="field">
+                <label for="imageNegativePromptInput">Negative Prompt</label>
+                <textarea id="imageNegativePromptInput" placeholder="Optional. Example: blurry, extra fingers, cropped face, duplicate limbs."></textarea>
+              </div>
+              <div class="asset-grid">
+                <div class="field">
+                  <label for="imageAssetKind">Asset Kind</label>
+                  <select id="imageAssetKind">
+                    <option value="portrait">Portrait</option>
+                    <option value="picture">Picture</option>
+                    <option value="face">Face</option>
+                    <option value="character">Character</option>
+                    <option value="battler">Battler</option>
+                    <option value="item_art">Item Art</option>
+                    <option value="scene">Scene</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="imageSize">Image Size</label>
+                  <input id="imageSize" type="text" value="1024x1024" placeholder="1024x1024">
+                </div>
+                <div class="field">
+                  <label for="imageTargetFileName">Target File Name</label>
+                  <input id="imageTargetFileName" type="text" placeholder="hero_gothic_dress.png">
+                </div>
+              </div>
+              <div class="editor-actions">
+                <button id="generateImageBtn" class="ghost">Generate Image Placeholder</button>
+              </div>
+              <div class="asset-preview-shell">
+                <div class="asset-preview-frame">
+                  <img id="generatedImagePreview" alt="Generated image preview" style="display:none">
+                </div>
+                <div id="generatedImageMeta" class="subtle">Configure imageProvider in config.json to connect a real image model. Until then, this panel previews the request shape and any saved output path.</div>
+              </div>
+              <pre id="imageGenerateOutput" class="asset-output">No image request yet.</pre>
+            </section>
+
+            <section class="editor-section">
               <h3>Bind To NPC / Actor / Item</h3>
               <div class="asset-grid">
                 <div class="field">
@@ -1088,6 +1132,15 @@
       assetPromptInput: document.getElementById("assetPromptInput"),
       assetPromptOutput: document.getElementById("assetPromptOutput"),
       generateAssetPromptsBtn: document.getElementById("generateAssetPromptsBtn"),
+      imagePromptInput: document.getElementById("imagePromptInput"),
+      imageNegativePromptInput: document.getElementById("imageNegativePromptInput"),
+      imageAssetKind: document.getElementById("imageAssetKind"),
+      imageSize: document.getElementById("imageSize"),
+      imageTargetFileName: document.getElementById("imageTargetFileName"),
+      generateImageBtn: document.getElementById("generateImageBtn"),
+      generatedImagePreview: document.getElementById("generatedImagePreview"),
+      generatedImageMeta: document.getElementById("generatedImageMeta"),
+      imageGenerateOutput: document.getElementById("imageGenerateOutput"),
       assetOwnerType: document.getElementById("assetOwnerType"),
       assetOwnerId: document.getElementById("assetOwnerId"),
       assetKind: document.getElementById("assetKind"),
@@ -1132,6 +1185,7 @@
     elements.loadAssetsBtn.addEventListener("click", onLoadAssets);
     elements.loadDatabaseBtn.addEventListener("click", onLoadDatabase);
     elements.generateAssetPromptsBtn.addEventListener("click", onGenerateAssetPrompts);
+    elements.generateImageBtn.addEventListener("click", onGenerateImage);
     elements.bindAssetBtn.addEventListener("click", onSaveAssetBinding);
     elements.assetOwnerType.addEventListener("change", syncAssetOwnerOptions);
     elements.dbCategory.addEventListener("change", () => renderDatabaseStudio(latestDatabase));
@@ -2512,6 +2566,56 @@ ${escapeHtml(categoryText || "")}</small>
       }
     }
 
+    async function onGenerateImage() {
+      const prompt = elements.imagePromptInput.value.trim();
+      if (!prompt) {
+        setStatus("Enter an image prompt first.", "error");
+        return;
+      }
+
+      setBusy(true);
+      setStatus("Sending the image request through the placeholder image API layer.", "");
+      try {
+        const result = await postJson("/image/generate", {
+          projectDir: elements.projectDir.value.trim(),
+          prompt,
+          negativePrompt: elements.imageNegativePromptInput.value.trim(),
+          assetKind: elements.imageAssetKind.value,
+          size: elements.imageSize.value.trim(),
+          targetFileName: elements.imageTargetFileName.value.trim(),
+          ownerType: elements.assetOwnerType.value,
+          ownerId: elements.assetOwnerId.value
+        });
+
+        elements.imageGenerateOutput.textContent = JSON.stringify(result, null, 2);
+        const savedAsset = Array.isArray(result.savedAssets) ? result.savedAssets[0] : null;
+        if (savedAsset && savedAsset.previewUrl) {
+          elements.generatedImagePreview.src = savedAsset.previewUrl;
+          elements.generatedImagePreview.style.display = "block";
+          elements.generatedImageMeta.textContent = `Saved to ${savedAsset.projectPath}. You can bind it immediately or use it in Event Composer.`;
+          elements.assetExistingProjectPath.value = savedAsset.projectPath || "";
+          elements.assetTargetFileName.value = savedAsset.fileName || "";
+          await loadAssets(true);
+        } else {
+          elements.generatedImagePreview.removeAttribute("src");
+          elements.generatedImagePreview.style.display = "none";
+          elements.generatedImageMeta.textContent = result.configured
+            ? "The image request completed, but no project asset path was saved. Add a project directory and target file name to save directly into the RPG Maker project."
+            : (result.message || "Image provider not configured yet.");
+        }
+
+        if (result.configured) {
+          setStatus("Image API request finished. If an asset was saved, it is ready for binding or event use.", "ok");
+        } else {
+          setStatus("Image API placeholder is ready. Add imageProvider settings later to connect a real image model.", "ok");
+        }
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
     async function onSaveAssetBinding() {
       const projectDir = elements.projectDir.value.trim();
       if (!projectDir) {
@@ -2921,6 +3025,7 @@ ${escapeHtml(categoryText || "")}</small>
       elements.loadAssetsBtn.disabled = isBusy;
       elements.loadDatabaseBtn.disabled = isBusy;
       elements.generateAssetPromptsBtn.disabled = isBusy;
+      elements.generateImageBtn.disabled = isBusy;
       elements.bindAssetBtn.disabled = isBusy;
       elements.generateDbDraftBtn.disabled = isBusy;
       elements.createDbEntryBtn.disabled = isBusy;

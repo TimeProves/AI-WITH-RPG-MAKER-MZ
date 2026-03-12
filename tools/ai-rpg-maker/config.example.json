@@ -11,6 +11,20 @@
     "maxTokens": 512,
     "anthropicVersion": "2023-06-01"
   },
+  "imageProvider": {
+    "baseUrl": "https://your-image-provider.example.com",
+    "apiStyle": "images_generations",
+    "apiPath": "/v1/images/generations",
+    "apiKey": "OPTIONAL_IMAGE_API_KEY",
+    "model": "gpt-image-1",
+    "size": "1024x1024",
+    "quality": "medium",
+    "background": "auto",
+    "moderation": "auto",
+    "outputFormat": "png",
+    "responseFormat": "b64_json",
+    "n": 1
+  },
   "mapDefaults": {
     "tilesetId": 1,
     "baseFloorTileId": 2816,

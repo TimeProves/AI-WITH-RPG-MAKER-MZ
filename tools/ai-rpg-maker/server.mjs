@@ -35,6 +35,14 @@ const server = http.createServer(async (req, res) => {
                     apiStyle: config.provider.apiStyle,
                     apiPath: config.provider.apiPath,
                     model: config.provider.model
+                },
+                imageProvider: {
+                    configured: hasImageProvider(config.imageProvider),
+                    baseUrl: config.imageProvider.baseUrl,
+                    apiStyle: config.imageProvider.apiStyle,
+                    apiPath: config.imageProvider.apiPath,
+                    model: config.imageProvider.model,
+                    defaultSize: config.imageProvider.size
                 }
             });
             return;
@@ -61,6 +69,12 @@ const server = http.createServer(async (req, res) => {
         if (req.method === "POST" && pathname === "/asset-prompts") {
             const body = await readJson(req);
             sendJson(res, 200, await handleAssetPrompts(body, config));
+            return;
+        }
+
+        if (req.method === "POST" && pathname === "/image/generate") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleImageGenerate(body, config));
             return;
         }
 
@@ -160,6 +174,11 @@ const server = http.createServer(async (req, res) => {
 server.listen(config.listenPort, config.listenHost, () => {
     console.log(`AI RPG Maker proxy listening at http://${config.listenHost}:${config.listenPort}`);
     console.log(`Provider: ${config.provider.baseUrl}${config.provider.apiPath} (${config.provider.apiStyle})`);
+    if (hasImageProvider(config.imageProvider)) {
+        console.log(`Image provider: ${config.imageProvider.baseUrl}${config.imageProvider.apiPath} (${config.imageProvider.apiStyle})`);
+    } else {
+        console.log("Image provider: not configured (API placeholder mode)");
+    }
 });
 
 function loadConfig(filePath) {
@@ -187,6 +206,7 @@ function loadConfig(filePath) {
             maxTokens: Number(parsed.provider.maxTokens ?? 512),
             anthropicVersion: String(parsed.provider.anthropicVersion || "2023-06-01")
         },
+        imageProvider: normalizeImageProvider(parsed.imageProvider),
         mapDefaults: {
             tilesetId: Number(parsed.mapDefaults?.tilesetId || 1),
             baseFloorTileId: Number(parsed.mapDefaults?.baseFloorTileId || 2816),
@@ -194,6 +214,28 @@ function loadConfig(filePath) {
             interiorHeight: Number(parsed.mapDefaults?.interiorHeight || 13)
         }
     };
+}
+
+function normalizeImageProvider(provider) {
+    const parsed = provider && typeof provider === "object" ? provider : {};
+    return {
+        baseUrl: String(parsed.baseUrl || "").replace(/\/+$/, ""),
+        apiStyle: String(parsed.apiStyle || "images_generations"),
+        apiPath: String(parsed.apiPath || defaultImageApiPath(parsed.apiStyle)),
+        apiKey: String(parsed.apiKey || ""),
+        model: String(parsed.model || "gpt-image-1"),
+        size: String(parsed.size || "1024x1024"),
+        quality: String(parsed.quality || "medium"),
+        background: String(parsed.background || "auto"),
+        moderation: String(parsed.moderation || "auto"),
+        outputFormat: String(parsed.outputFormat || "png"),
+        responseFormat: String(parsed.responseFormat || "b64_json"),
+        n: Number(parsed.n ?? 1)
+    };
+}
+
+function hasImageProvider(provider) {
+    return Boolean(provider?.baseUrl && provider?.apiKey);
 }
 
 async function handleNpcChat(body, runtimeConfig) {
@@ -393,6 +435,65 @@ async function handleAssetPrompts(body, runtimeConfig) {
 
     const text = await callProvider(runtimeConfig.provider, systemPrompt, userPrompt);
     return parseJsonObject(text);
+}
+
+async function handleImageGenerate(body, runtimeConfig) {
+    const prompt = String(body?.prompt || "").trim();
+    if (!prompt) {
+        throw new Error("Missing prompt.");
+    }
+
+    const request = {
+        prompt,
+        negativePrompt: String(body?.negativePrompt || "").trim(),
+        assetKind: String(body?.assetKind || "picture").trim() || "picture",
+        size: String(body?.size || runtimeConfig.imageProvider.size || "1024x1024").trim(),
+        quality: String(body?.quality || runtimeConfig.imageProvider.quality || "medium").trim(),
+        background: String(body?.background || runtimeConfig.imageProvider.background || "auto").trim(),
+        targetFileName: String(body?.targetFileName || "").trim(),
+        projectDir: String(body?.projectDir || "").trim(),
+        ownerType: String(body?.ownerType || "").trim(),
+        ownerId: String(body?.ownerId || "").trim()
+    };
+
+    if (body?.dryRun === true) {
+        return {
+            configured: hasImageProvider(runtimeConfig.imageProvider),
+            dryRun: true,
+            message: "Dry run only. No external image request was sent.",
+            requestPreview: {
+                apiStyle: runtimeConfig.imageProvider.apiStyle,
+                apiPath: runtimeConfig.imageProvider.apiPath,
+                model: runtimeConfig.imageProvider.model,
+                ...request
+            }
+        };
+    }
+
+    if (!hasImageProvider(runtimeConfig.imageProvider)) {
+        return {
+            configured: false,
+            message: "Image provider is not configured yet. Fill imageProvider in config.json when you are ready to connect a real image API.",
+            requestPreview: {
+                apiStyle: runtimeConfig.imageProvider.apiStyle,
+                apiPath: runtimeConfig.imageProvider.apiPath,
+                model: runtimeConfig.imageProvider.model,
+                ...request
+            }
+        };
+    }
+
+    const generated = await callImageProvider(runtimeConfig.imageProvider, request);
+    return {
+        configured: true,
+        provider: {
+            baseUrl: runtimeConfig.imageProvider.baseUrl,
+            apiStyle: runtimeConfig.imageProvider.apiStyle,
+            apiPath: runtimeConfig.imageProvider.apiPath,
+            model: runtimeConfig.imageProvider.model
+        },
+        ...generated
+    };
 }
 
 async function handlePipelinePreview(body, runtimeConfig) {
@@ -1158,6 +1259,45 @@ async function callProvider(provider, systemPrompt, userPrompt) {
     return extractText(await response.json());
 }
 
+async function callImageProvider(provider, request) {
+    const apiUrl = `${provider.baseUrl}${provider.apiPath.startsWith("/") ? provider.apiPath : `/${provider.apiPath}`}`;
+    const { headers, body } = buildImageProviderRequest(provider, request);
+    const response = await fetch(apiUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Image provider request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    const images = extractImages(json);
+    if (!images.length) {
+        return {
+            images: [],
+            savedAssets: [],
+            raw: json
+        };
+    }
+
+    const savedAssets = [];
+    for (let index = 0; index < images.length; index += 1) {
+        const saved = await persistGeneratedImage(images[index], request, index);
+        if (saved) {
+            savedAssets.push(saved);
+        }
+    }
+
+    return {
+        images,
+        savedAssets,
+        raw: json
+    };
+}
+
 function defaultApiPath(apiStyle) {
     switch (String(apiStyle || "")) {
         case "chat_completions":
@@ -1167,6 +1307,14 @@ function defaultApiPath(apiStyle) {
         case "responses":
         default:
             return "/v1/responses";
+    }
+}
+
+function defaultImageApiPath(apiStyle) {
+    switch (String(apiStyle || "")) {
+        case "images_generations":
+        default:
+            return "/v1/images/generations";
     }
 }
 
@@ -1661,6 +1809,165 @@ function assetFolderForKind(assetKind) {
         default:
             return "pictures";
     }
+}
+
+function buildImageProviderRequest(provider, request) {
+    switch (provider.apiStyle) {
+        case "images_generations":
+        default:
+            return {
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${provider.apiKey}`
+                },
+                body: {
+                    model: provider.model,
+                    prompt: request.negativePrompt
+                        ? `${request.prompt}\n\nNegative prompt: ${request.negativePrompt}`
+                        : request.prompt,
+                    size: request.size || provider.size,
+                    quality: request.quality || provider.quality,
+                    background: request.background || provider.background,
+                    moderation: provider.moderation,
+                    output_format: provider.outputFormat,
+                    response_format: provider.responseFormat,
+                    n: provider.n || 1
+                }
+            };
+    }
+}
+
+function extractImages(json) {
+    if (Array.isArray(json?.data)) {
+        return json.data
+            .map((entry, index) => ({
+                id: String(entry?.id || `image_${index + 1}`),
+                url: typeof entry?.url === "string" ? entry.url : "",
+                b64Json: typeof entry?.b64_json === "string" ? entry.b64_json : "",
+                revisedPrompt: typeof entry?.revised_prompt === "string" ? entry.revised_prompt : "",
+                mimeType: typeof entry?.mime_type === "string" ? entry.mime_type : inferMimeTypeFromFormat(entry?.output_format)
+            }))
+            .filter(entry => entry.url || entry.b64Json);
+    }
+
+    if (Array.isArray(json?.output)) {
+        return json.output
+            .flatMap((entry, index) => {
+                const content = Array.isArray(entry?.content) ? entry.content : [];
+                return content.map((item, contentIndex) => ({
+                    id: String(item?.id || `image_${index + 1}_${contentIndex + 1}`),
+                    url: typeof item?.image_url === "string" ? item.image_url : "",
+                    b64Json: typeof item?.b64_json === "string" ? item.b64_json : "",
+                    revisedPrompt: typeof item?.revised_prompt === "string" ? item.revised_prompt : "",
+                    mimeType: typeof item?.mime_type === "string" ? item.mime_type : inferMimeTypeFromFormat(item?.output_format)
+                }));
+            })
+            .filter(entry => entry.url || entry.b64Json);
+    }
+
+    return [];
+}
+
+function inferMimeTypeFromFormat(format) {
+    switch (String(format || "").toLowerCase()) {
+        case "jpg":
+        case "jpeg":
+            return "image/jpeg";
+        case "webp":
+            return "image/webp";
+        case "png":
+        default:
+            return "image/png";
+    }
+}
+
+async function persistGeneratedImage(image, request, index) {
+    const target = resolveGeneratedImageTarget(request, image, index);
+    if (!target) {
+        return null;
+    }
+
+    fs.mkdirSync(path.dirname(target.absolutePath), { recursive: true });
+    if (image.b64Json) {
+        fs.writeFileSync(target.absolutePath, Buffer.from(image.b64Json, "base64"));
+    } else if (image.url) {
+        const response = await fetch(image.url);
+        if (!response.ok) {
+            throw new Error(`Failed to download generated image: ${response.status} ${response.statusText}`);
+        }
+        fs.writeFileSync(target.absolutePath, Buffer.from(await response.arrayBuffer()));
+    } else {
+        return null;
+    }
+
+    return {
+        id: image.id,
+        absolutePath: target.absolutePath,
+        projectPath: target.projectPath,
+        previewUrl: target.projectPath && request.projectDir
+            ? `/project/asset-file?projectDir=${encodeURIComponent(request.projectDir)}&projectPath=${encodeURIComponent(target.projectPath)}`
+            : "",
+        fileName: path.basename(target.absolutePath),
+        assetKind: request.assetKind,
+        ownerType: request.ownerType,
+        ownerId: request.ownerId,
+        revisedPrompt: image.revisedPrompt
+    };
+}
+
+function resolveGeneratedImageTarget(request, image, index) {
+    const extension = inferImageExtension(request.targetFileName, image);
+    const baseName = slugify(
+        path.parse(request.targetFileName || "").name
+        || `${request.assetKind || "image"}_${request.ownerType || "asset"}_${request.ownerId || index + 1}`
+    ) || `generated_${index + 1}`;
+
+    if (request.projectDir) {
+        const projectPath = `${resolveProjectAssetFolder(request.assetKind)}/${baseName}.${extension}`;
+        return {
+            absolutePath: path.join(request.projectDir, projectPath.replaceAll("/", path.sep)),
+            projectPath
+        };
+    }
+
+    return {
+        absolutePath: path.join(__dirname, "generated-images", `${baseName}.${extension}`),
+        projectPath: ""
+    };
+}
+
+function resolveProjectAssetFolder(assetKind) {
+    switch (String(assetKind || "").toLowerCase()) {
+        case "face":
+            return "img/faces";
+        case "character":
+            return "img/characters";
+        case "battler":
+            return "img/sv_actors";
+        case "scene":
+            return "img/parallaxes";
+        case "portrait":
+        case "picture":
+        case "item_art":
+        default:
+            return "img/pictures";
+    }
+}
+
+function inferImageExtension(targetFileName, image) {
+    const fileExtension = path.extname(String(targetFileName || "")).replace(/^\./, "").toLowerCase();
+    if (fileExtension) {
+        return fileExtension;
+    }
+
+    const mimeType = String(image?.mimeType || "").toLowerCase();
+    if (mimeType.includes("jpeg")) {
+        return "jpg";
+    }
+    if (mimeType.includes("webp")) {
+        return "webp";
+    }
+    return "png";
 }
 
 function normalizeStringList(value) {

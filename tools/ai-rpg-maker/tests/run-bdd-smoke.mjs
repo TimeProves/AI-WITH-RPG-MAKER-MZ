@@ -134,6 +134,27 @@ const scenarios = [
         }
     },
     {
+        title: "Image API route returns a structured dry-run preview",
+        run: async context => {
+            const result = await postJson("http://127.0.0.1:43115/image/generate", {
+                dryRun: true,
+                projectDir: context.projectDir,
+                prompt: "A gothic strapless evening dress portrait for the heroine.",
+                negativePrompt: "blurry, extra fingers",
+                assetKind: "portrait",
+                size: "1024x1024",
+                targetFileName: "hero_gothic_dress.png",
+                ownerType: "actor",
+                ownerId: "1"
+            });
+
+            assert.equal(result.dryRun, true);
+            assert.match(String(result.message || ""), /dry run/i);
+            assert.equal(result.requestPreview.assetKind, "portrait");
+            assert.equal(result.requestPreview.targetFileName, "hero_gothic_dress.png");
+        }
+    },
+    {
         title: "Saving asset bindings updates project data",
         run: async context => {
             const faceAsset = context.assetLibrary.assets.find(asset => asset.folder === "faces");
