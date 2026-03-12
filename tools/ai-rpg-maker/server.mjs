@@ -76,6 +76,12 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        if (req.method === "POST" && pathname === "/pipeline/backups") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handlePipelineBackups(body));
+            return;
+        }
+
         if (req.method === "POST" && pathname === "/pipeline/undo") {
             const body = await readJson(req);
             sendJson(res, 200, await handlePipelineUndo(body));
@@ -540,7 +546,20 @@ async function handlePipelineUndo(body) {
         ok: true,
         backupId,
         restoredFiles: manifest.backedUpFiles || [],
-        deletedCreatedFiles: manifest.createdFiles || []
+        deletedCreatedFiles: manifest.createdFiles || [],
+        backups: listProjectBackups(projectDir)
+    };
+}
+
+async function handlePipelineBackups(body) {
+    const projectDir = String(body?.projectDir || "").trim();
+    if (!projectDir) {
+        throw new Error("Missing projectDir.");
+    }
+
+    return {
+        ok: true,
+        backups: listProjectBackups(projectDir)
     };
 }
 
@@ -809,6 +828,7 @@ function buildProjectedDiff({ projectDir, slug, mergedMapPlan, contentPlan, writ
         outputDir,
         mapIds,
         fileChanges: dedupeFileChanges(fileChanges),
+        categories: summarizeDiffCategories(dedupeFileChanges(fileChanges)),
         summary: {
             buildings: buildingCount,
             projectedMapFiles: mapIds.length,
@@ -826,7 +846,8 @@ function makeFileChange(projectDir, relativePath) {
     return {
         path: normalized.replace(/\\/g, "/"),
         absolutePath,
-        action: fs.existsSync(absolutePath) ? "update" : "create"
+        action: fs.existsSync(absolutePath) ? "update" : "create",
+        category: categorizeFilePath(normalized.replace(/\\/g, "/"))
     };
 }
 
@@ -864,6 +885,8 @@ function createProjectBackup(projectDir, diff, metadata) {
         createdAt: metadata.generatedAt,
         prompt: metadata.prompt,
         slug: metadata.slug,
+        diffSummary: diff.summary,
+        diffCategories: diff.categories,
         backedUpFiles,
         createdFiles
     };
@@ -874,4 +897,78 @@ function createProjectBackup(projectDir, diff, metadata) {
         backedUpFiles: backedUpFiles.length,
         createdFiles: createdFiles.length
     };
+}
+
+function summarizeDiffCategories(fileChanges) {
+    const summary = {};
+    for (const change of fileChanges) {
+        const key = change.category || "other";
+        if (!summary[key]) {
+            summary[key] = { create: 0, update: 0 };
+        }
+        summary[key][change.action] += 1;
+    }
+    return summary;
+}
+
+function categorizeFilePath(relativePath) {
+    if (/^data\/Map\d+\.json$/i.test(relativePath)) {
+        return "maps";
+    }
+    if (relativePath === "data/MapInfos.json") {
+        return "mapIndex";
+    }
+    if (relativePath.startsWith("data/Ai")) {
+        return "aiData";
+    }
+    if (relativePath === "data/System.json") {
+        return "system";
+    }
+    if (relativePath === "data/CommonEvents.json") {
+        return "commonEvents";
+    }
+    if (relativePath === "data/Items.json") {
+        return "items";
+    }
+    if (relativePath.startsWith("js/plugins/")) {
+        return "plugins";
+    }
+    if (relativePath.startsWith("ai-generated/")) {
+        return "generatedPlans";
+    }
+    if (relativePath === "ai-generated-content.md") {
+        return "notes";
+    }
+    return "other";
+}
+
+function listProjectBackups(projectDir) {
+    const backupRoot = path.join(projectDir, ".ai-backups");
+    if (!fs.existsSync(backupRoot)) {
+        return [];
+    }
+
+    return fs
+        .readdirSync(backupRoot, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .map(entry => {
+            const manifestPath = path.join(backupRoot, entry.name, "manifest.json");
+            if (!fs.existsSync(manifestPath)) {
+                return null;
+            }
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+            return {
+                id: manifest.id,
+                createdAt: manifest.createdAt,
+                restoredAt: manifest.restoredAt || null,
+                slug: manifest.slug || "",
+                prompt: manifest.prompt || "",
+                backedUpFiles: Array.isArray(manifest.backedUpFiles) ? manifest.backedUpFiles.length : 0,
+                createdFiles: Array.isArray(manifest.createdFiles) ? manifest.createdFiles.length : 0,
+                diffSummary: manifest.diffSummary || null,
+                diffCategories: manifest.diffCategories || {}
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 }
