@@ -27,3 +27,19 @@ Feature: AI RPG Maker workbench local smoke behaviors
     Then the new map should contain the NPC event
     And the old map should no longer contain that event id
     And AiNpcProfiles.json should still contain the saved stage
+
+  Scenario: Asset library indexes local image folders
+    Given a generated city skeleton exists
+    When I request the project asset library
+    Then the asset library should list at least one image file
+    And the asset library should expose owner choices for NPCs, actors, and items
+
+  Scenario: Saving asset bindings updates project data
+    Given a generated city skeleton exists
+    When I bind a face asset to actor 1
+    And I bind a picture asset to item 7
+    And I bind a character asset to an existing AI NPC
+    Then Actors.json should reference the bound face image
+    And Items.json should contain an asset note tag for item 7
+    And AiNpcProfiles.json should record the NPC character binding
+    And the target NPC event should reference the bound character image

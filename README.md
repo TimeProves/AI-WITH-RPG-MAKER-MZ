@@ -10,6 +10,7 @@ AI workbench for RPG Maker MZ with:
 - a project explorer for browsing maps, submaps, and per-NPC settings
 - drag-and-drop NPC relocation between maps and submaps
 - a visual stage editor for conditional NPC dialogue states
+- an asset library for browsing local project images and binding them to actors, NPCs, and items
 - NPC profile and quest-state generation
 - common event and item scaffolding
 - BDD-style feature templates and smoke tests for core local behaviors
@@ -38,6 +39,7 @@ Both launchers will:
 - `tools/ai-rpg-maker/run-workbench-server.ps1`
 - `tools/ai-rpg-maker/scaffold-game-from-prompt.mjs`
 - `tools/ai-rpg-maker/apply-content-plan.mjs`
+- `tools/ai-rpg-maker/asset-pipeline-notes.md`
 - `tools/ai-rpg-maker/tests/rpg-maker-bdd-template.feature`
 - `tools/ai-rpg-maker/tests/workbench-smoke.feature`
 - `tools/ai-rpg-maker/tests/run-bdd-smoke.mjs`
@@ -50,6 +52,7 @@ Both launchers will:
 - load a project overview to browse map -> submap -> NPC structure
 - drag NPCs between maps in the tree or change their target map in the editor
 - edit background, placement, movement, tracked states, and dialogue stages
+- browse discovered project art in the asset library and bind it to actors, NPCs, or items
 - preview generated content before writing it into the project
 - apply with automatic backup and restore support
 - run the BDD smoke suite to validate local project behaviors after major changes
@@ -71,6 +74,9 @@ Both launchers will:
 - [x] Per-NPC editor for placement, movement, role, background, notes, and tracked state
 - [x] Drag-and-drop NPC relocation between maps and submaps
 - [x] Visual stage editor for conditional NPC dialogue states
+- [x] Asset library for scanning `img/faces`, `img/characters`, `img/pictures`, `img/sv_actors`, and `img/parallaxes`
+- [x] Binding an existing or imported local image to an actor, NPC, or item
+- [x] Persisting asset ownership in `AiAssetBindings.json`
 - [x] Writing generated NPC, quest, and item data into RPG Maker project files
 - [x] Automatic backup before apply
 - [x] Restore from backup history
@@ -80,7 +86,8 @@ Both launchers will:
 
 ## Not Supported Yet
 
-- [ ] Real image generation API integration
+- [ ] Real image generation API integration that creates final art inside the workbench
+- [ ] Inpainting, outpainting, or direct AI editing of existing art assets
 - [ ] Voice input or speech-to-text for player dialogue
 - [ ] NPC voice output or text-to-speech
 - [ ] Creating or editing tiles visually inside the RPG Maker editor UI itself
@@ -115,9 +122,9 @@ http://127.0.0.1:43115/
 BDD files live in `tools/ai-rpg-maker/tests/`.
 
 - `rpg-maker-bdd-template.feature`
-  Reusable acceptance-test template for maps, NPCs, dialogue stages, exports, and backup flows.
+  Reusable acceptance-test template for maps, NPCs, dialogue stages, asset binding, exports, and backup flows.
 - `workbench-smoke.feature`
-  Current smoke scenarios for the local workbench behavior.
+  Current smoke scenarios for the local workbench behavior, including asset-library and binding coverage.
 - `run-bdd-smoke.mjs`
   Executable smoke runner for deterministic behaviors that do not depend on live model output.
 
@@ -130,5 +137,6 @@ node "C:\Program Files (x86)\Steam\steamapps\common\RPG Maker MZ\tools\ai-rpg-ma
 ## Current Scope
 
 - Text workflow is connected end to end
-- Image prompt generation is supported, but a real image API is not wired yet
+- Image prompt generation, asset browsing, and local asset binding are supported
+- A real image API is not wired yet, so final image creation still depends on an external provider or manually supplied files
 - The workflow extends project data and plugins instead of patching the RPG Maker editor itself

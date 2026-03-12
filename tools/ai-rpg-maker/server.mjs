@@ -100,6 +100,18 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        if (req.method === "POST" && pathname === "/project/assets") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectAssets(body));
+            return;
+        }
+
+        if (req.method === "POST" && pathname === "/project/asset/save") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectAssetSave(body));
+            return;
+        }
+
         sendJson(res, 404, { error: "Not found." });
     } catch (error) {
         sendJson(res, 500, {
@@ -604,6 +616,36 @@ async function handleProjectNpcSave(body) {
     };
 }
 
+async function handleProjectAssets(body) {
+    const projectDir = String(body?.projectDir || "").trim();
+    if (!projectDir) {
+        throw new Error("Missing projectDir.");
+    }
+
+    return {
+        ok: true,
+        assets: buildProjectAssetLibrary(projectDir)
+    };
+}
+
+async function handleProjectAssetSave(body) {
+    const projectDir = String(body?.projectDir || "").trim();
+    const binding = body?.binding || {};
+    if (!projectDir) {
+        throw new Error("Missing projectDir.");
+    }
+    if (!binding || !String(binding.ownerType || "").trim()) {
+        throw new Error("Missing binding.ownerType.");
+    }
+
+    saveProjectAssetBinding(projectDir, binding);
+    return {
+        ok: true,
+        assets: buildProjectAssetLibrary(projectDir),
+        overview: buildProjectOverview(projectDir)
+    };
+}
+
 function buildProjectOverview(projectDir) {
     assertProjectShape(projectDir);
     const dataDir = path.join(projectDir, "data");
@@ -651,13 +693,17 @@ function buildProjectOverview(projectDir) {
     }
 
     const tree = buildMapTree(mapRecords);
+    const actors = readJsonFile(path.join(dataDir, "Actors.json"), []).filter(Boolean);
+    const items = readJsonFile(path.join(dataDir, "Items.json"), []).filter(Boolean);
     return {
         projectDir,
         worldContext: String(profileStore.worldContext || ""),
         summary: {
             maps: mapRecords.length,
             npcCount: npcRecords.length,
-            profileCount: profiles.length
+            profileCount: profiles.length,
+            actorCount: actors.length,
+            itemCount: items.length
         },
         tree,
         maps: mapRecords
@@ -671,7 +717,19 @@ function buildProjectOverview(projectDir) {
                 npcCount: Array.isArray(record.npcs) ? record.npcs.length : 0
             }))
             .sort((left, right) => left.path.localeCompare(right.path)),
-        npcs: npcRecords.sort((left, right) => left.path.localeCompare(right.path) || left.name.localeCompare(right.name))
+        npcs: npcRecords.sort((left, right) => left.path.localeCompare(right.path) || left.name.localeCompare(right.name)),
+        actors: actors.map(actor => ({
+            id: actor.id,
+            name: actor.name,
+            faceName: actor.faceName || "",
+            characterName: actor.characterName || "",
+            battlerName: actor.battlerName || ""
+        })),
+        items: items.map(item => ({
+            id: item.id,
+            name: item.name || `Item ${item.id}`,
+            note: item.note || ""
+        }))
     };
 }
 
@@ -771,6 +829,72 @@ function saveNpcConfig(projectDir, npcInput) {
         trackedVariableIds: joinIdList(normalized.trackedVariableIds)
     });
     writeJsonFile(targetMapPath, targetMapData);
+}
+
+function buildProjectAssetLibrary(projectDir) {
+    assertProjectShape(projectDir);
+    const dataDir = path.join(projectDir, "data");
+    const overview = buildProjectOverview(projectDir);
+    const bindingStore = ensureAssetBindingStore(readJsonFile(path.join(dataDir, "AiAssetBindings.json"), null));
+    const assets = scanProjectImageAssets(projectDir);
+    const bindingsByPath = new Map();
+
+    for (const binding of bindingStore.assets) {
+        const key = String(binding.projectPath || "");
+        if (!bindingsByPath.has(key)) {
+            bindingsByPath.set(key, []);
+        }
+        bindingsByPath.get(key).push({
+            id: binding.id,
+            ownerType: binding.ownerType,
+            ownerId: binding.ownerId,
+            assetKind: binding.assetKind
+        });
+    }
+
+    const folders = {};
+    for (const asset of assets) {
+        folders[asset.folder] = (folders[asset.folder] || 0) + 1;
+        asset.bindings = bindingsByPath.get(asset.projectPath) || [];
+    }
+
+    return {
+        projectDir,
+        summary: {
+            assetFiles: assets.length,
+            bindings: bindingStore.assets.length,
+            folders: Object.keys(folders).length
+        },
+        folders: Object.entries(folders)
+            .map(([name, count]) => ({ name, count }))
+            .sort((left, right) => left.name.localeCompare(right.name)),
+        assets,
+        bindings: bindingStore.assets.sort((left, right) => left.id.localeCompare(right.id)),
+        owners: {
+            npcs: overview.npcs.map(npc => ({ id: npc.id, name: npc.name, label: npc.path })),
+            actors: overview.actors.map(actor => ({ id: actor.id, name: actor.name })),
+            items: overview.items.map(item => ({ id: item.id, name: item.name }))
+        }
+    };
+}
+
+function saveProjectAssetBinding(projectDir, input) {
+    assertProjectShape(projectDir);
+    const dataDir = path.join(projectDir, "data");
+    const bindingPath = path.join(dataDir, "AiAssetBindings.json");
+    const store = ensureAssetBindingStore(readJsonFile(bindingPath, null));
+    const normalized = normalizeAssetBindingInput(projectDir, input);
+    const finalBinding = materializeBindingFile(projectDir, normalized);
+
+    let binding = store.assets.find(entry => entry.id === finalBinding.id);
+    if (!binding) {
+        binding = { id: finalBinding.id };
+        store.assets.push(binding);
+    }
+    Object.assign(binding, finalBinding);
+    writeJsonFile(bindingPath, store);
+
+    applyAssetBindingToProject(projectDir, binding, store);
 }
 
 async function generatePipelineArtifacts(prompt, withAssets, runtimeConfig) {
@@ -1205,6 +1329,261 @@ function ensureProfileStore(store) {
         version: Number(base.version || 1),
         worldContext: String(base.worldContext || ""),
         npcs: Array.isArray(base.npcs) ? base.npcs : []
+    };
+}
+
+function ensureAssetBindingStore(store) {
+    const base = store && typeof store === "object" ? store : {};
+    return {
+        version: Number(base.version || 1),
+        assets: Array.isArray(base.assets) ? base.assets : []
+    };
+}
+
+function scanProjectImageAssets(projectDir) {
+    const imgRoot = path.join(projectDir, "img");
+    const targets = [
+        { folder: "characters", dir: path.join(imgRoot, "characters"), assetKind: "character" },
+        { folder: "faces", dir: path.join(imgRoot, "faces"), assetKind: "face" },
+        { folder: "pictures", dir: path.join(imgRoot, "pictures"), assetKind: "picture" },
+        { folder: "sv_actors", dir: path.join(imgRoot, "sv_actors"), assetKind: "battler" },
+        { folder: "parallaxes", dir: path.join(imgRoot, "parallaxes"), assetKind: "scene" }
+    ];
+
+    const assets = [];
+    for (const target of targets) {
+        if (!fs.existsSync(target.dir)) {
+            continue;
+        }
+        for (const file of fs.readdirSync(target.dir, { withFileTypes: true })) {
+            if (!file.isFile() || !/\.(png|jpg|jpeg|webp)$/i.test(file.name)) {
+                continue;
+            }
+            assets.push({
+                id: `${target.folder}/${file.name}`,
+                fileName: file.name,
+                folder: target.folder,
+                assetKind: target.assetKind,
+                projectPath: path.posix.join("img", target.folder, file.name),
+                absolutePath: path.join(target.dir, file.name)
+            });
+        }
+    }
+    return assets.sort((left, right) => left.projectPath.localeCompare(right.projectPath));
+}
+
+function normalizeAssetBindingInput(projectDir, input) {
+    const ownerType = String(input?.ownerType || "").trim();
+    const ownerId = String(input?.ownerId ?? "").trim();
+    const assetKind = String(input?.assetKind || "picture").trim();
+    if (!ownerType) {
+        throw new Error("Asset binding requires ownerType.");
+    }
+    if (!ownerId) {
+        throw new Error("Asset binding requires ownerId.");
+    }
+
+    const existingProjectPath = String(input?.existingProjectPath || "").trim().replace(/\\/g, "/");
+    const fallbackExtension = path.extname(String(input?.sourcePath || "")).toLowerCase() || ".png";
+    const desiredName = String(input?.targetFileName || input?.fileName || `${ownerType}-${ownerId}-${assetKind}${fallbackExtension}`);
+    const suggestedFileName = sanitizeFileName(desiredName);
+    const projectFolder = assetFolderForKind(assetKind);
+    const projectPath = existingProjectPath || path.posix.join("img", projectFolder, suggestedFileName);
+
+    return {
+        id: String(input?.id || `${ownerType}-${ownerId}-${assetKind}-${path.parse(suggestedFileName).name}`),
+        ownerType,
+        ownerId,
+        ownerName: String(input?.ownerName || ""),
+        assetKind,
+        projectFolder,
+        projectPath,
+        existingProjectPath,
+        sourcePath: String(input?.sourcePath || "").trim(),
+        prompt: String(input?.prompt || ""),
+        stageId: String(input?.stageId || ""),
+        tags: normalizeStringList(input?.tags),
+        generatedAt: new Date().toISOString(),
+        metadata: {
+            faceIndex: Number(input?.faceIndex || 0),
+            characterIndex: Number(input?.characterIndex || 0),
+            battlerSlot: String(input?.battlerSlot || ""),
+            notes: String(input?.notes || "")
+        }
+    };
+}
+
+function assetFolderForKind(assetKind) {
+    switch (assetKind) {
+        case "face":
+            return "faces";
+        case "character":
+            return "characters";
+        case "battler":
+            return "sv_actors";
+        case "scene":
+            return "parallaxes";
+        case "portrait":
+        case "item_art":
+        case "picture":
+        default:
+            return "pictures";
+    }
+}
+
+function normalizeStringList(value) {
+    if (Array.isArray(value)) {
+        return value.map(entry => String(entry).trim()).filter(Boolean);
+    }
+    return String(value || "")
+        .split(",")
+        .map(entry => entry.trim())
+        .filter(Boolean);
+}
+
+function sanitizeFileName(value) {
+    const trimmed = String(value || "asset.png").trim() || "asset.png";
+    return trimmed
+        .replace(/[<>:"/\\|?*\x00-\x1f]/g, "-")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "asset.png";
+}
+
+function materializeBindingFile(projectDir, binding) {
+    if (!binding.sourcePath) {
+        return binding;
+    }
+
+    const sourcePath = path.resolve(binding.sourcePath);
+    if (!fs.existsSync(sourcePath)) {
+        throw new Error(`Source asset not found: ${sourcePath}`);
+    }
+
+    const targetPath = path.join(projectDir, binding.projectPath.replace(/\//g, path.sep));
+    ensureDir(path.dirname(targetPath));
+    fs.copyFileSync(sourcePath, targetPath);
+
+    return {
+        ...binding,
+        sourcePath,
+        absolutePath: targetPath
+    };
+}
+
+function applyAssetBindingToProject(projectDir, binding, store) {
+    switch (binding.ownerType) {
+        case "actor":
+            applyBindingToActor(projectDir, binding);
+            break;
+        case "npc":
+            applyBindingToNpc(projectDir, binding, store);
+            break;
+        case "item":
+            applyBindingToItem(projectDir, binding);
+            break;
+        default:
+            throw new Error(`Unsupported ownerType: ${binding.ownerType}`);
+    }
+}
+
+function applyBindingToActor(projectDir, binding) {
+    const actorsPath = path.join(projectDir, "data", "Actors.json");
+    const actors = readJsonFile(actorsPath, []);
+    const actorId = Number(binding.ownerId);
+    const actor = actors.find(entry => entry && Number(entry.id) === actorId);
+    if (!actor) {
+        throw new Error(`Actor ${binding.ownerId} was not found.`);
+    }
+
+    const baseName = path.parse(binding.projectPath).name;
+    if (binding.assetKind === "face") {
+        actor.faceName = baseName;
+        actor.faceIndex = Number(binding.metadata.faceIndex || 0);
+    } else if (binding.assetKind === "character") {
+        actor.characterName = baseName;
+        actor.characterIndex = Number(binding.metadata.characterIndex || 0);
+    } else if (binding.assetKind === "battler") {
+        actor.battlerName = baseName;
+    } else {
+        actor.note = replaceTaggedNote(actor.note || "", "AiAssetPicture", binding.projectPath);
+    }
+    writeJsonFile(actorsPath, actors);
+}
+
+function applyBindingToNpc(projectDir, binding, store) {
+    const profilePath = path.join(projectDir, "data", "AiNpcProfiles.json");
+    const profileStore = ensureProfileStore(readJsonFile(profilePath, null));
+    let profile = profileStore.npcs.find(entry => String(entry?.id || "") === String(binding.ownerId));
+    if (!profile) {
+        profile = { id: String(binding.ownerId), name: String(binding.ownerName || binding.ownerId) };
+        profileStore.npcs.push(profile);
+    }
+
+    if (!Array.isArray(profile.assetBindings)) {
+        profile.assetBindings = [];
+    }
+    const existing = profile.assetBindings.find(entry => entry.assetKind === binding.assetKind && String(entry.stageId || "") === String(binding.stageId || ""));
+    const profileBinding = {
+        id: binding.id,
+        assetKind: binding.assetKind,
+        projectPath: binding.projectPath,
+        stageId: binding.stageId || "",
+        tags: binding.tags
+    };
+    if (existing) {
+        Object.assign(existing, profileBinding);
+    } else {
+        profile.assetBindings.push(profileBinding);
+    }
+    writeJsonFile(profilePath, profileStore);
+
+    if (binding.assetKind === "character") {
+        const location = findNpcEventLocation(projectDir, binding.ownerId);
+        if (location) {
+            const mapPath = mapFilePath(projectDir, location.mapId);
+            const mapData = readJsonFile(mapPath, null);
+            const event = mapData?.events?.[location.eventId];
+            const page = Array.isArray(event?.pages) ? event.pages[0] : null;
+            if (page) {
+                if (!page.image) {
+                    page.image = {};
+                }
+                page.image.characterName = path.parse(binding.projectPath).name;
+                page.image.characterIndex = Number(binding.metadata.characterIndex || 0);
+                writeJsonFile(mapPath, mapData);
+            }
+        }
+    }
+}
+
+function applyBindingToItem(projectDir, binding) {
+    const itemsPath = path.join(projectDir, "data", "Items.json");
+    const items = readJsonFile(itemsPath, []);
+    const itemId = Number(binding.ownerId);
+    const item = items.find(entry => entry && Number(entry.id) === itemId);
+    if (!item) {
+        throw new Error(`Item ${binding.ownerId} was not found.`);
+    }
+    item.note = replaceTaggedNote(item.note || "", "AiAssetPicture", binding.projectPath);
+    writeJsonFile(itemsPath, items);
+}
+
+function replaceTaggedNote(note, tag, value) {
+    const source = String(note || "");
+    const cleaned = source.replace(new RegExp(`<${tag}:[^>]*>`, "gi"), "").trim();
+    return `${cleaned}${cleaned ? "\n" : ""}<${tag}:${value}>`;
+}
+
+function findNpcEventLocation(projectDir, npcId) {
+    const overview = buildProjectOverview(projectDir);
+    const npc = overview.npcs.find(entry => String(entry.id) === String(npcId));
+    if (!npc) {
+        return null;
+    }
+    return {
+        mapId: npc.mapId,
+        eventId: npc.eventId
     };
 }
 

@@ -10,6 +10,7 @@ const tempProject = path.join(os.tmpdir(), "rmmz-bdd-smoke");
 const healthUrl = "http://127.0.0.1:43115/health";
 const examplePlanPath = path.join(toolsDir, "example-city-plan.json");
 const examplePlan = readJson(examplePlanPath);
+const sampleAssetFolders = ["faces", "pictures", "characters"];
 
 const scenarios = [
     {
@@ -118,6 +119,102 @@ const scenarios = [
             assert.equal(profile.stages.length, 1);
             assert.equal(profile.stages[0].id, "gate_closed");
         }
+    },
+    {
+        title: "Asset library indexes local image folders",
+        run: async context => {
+            const library = await postJson("http://127.0.0.1:43115/project/assets", {
+                projectDir: context.projectDir
+            });
+            assert.ok(library?.assets?.summary?.assetFiles >= 1, "Expected the asset library to discover at least one image file.");
+            assert.ok((library.assets.owners.npcs || []).length >= 1, "Expected NPC owners to be exposed.");
+            assert.ok((library.assets.owners.actors || []).length >= 1, "Expected actor owners to be exposed.");
+            assert.ok((library.assets.owners.items || []).length >= 1, "Expected item owners to be exposed.");
+            context.assetLibrary = library.assets;
+        }
+    },
+    {
+        title: "Saving asset bindings updates project data",
+        run: async context => {
+            const faceAsset = context.assetLibrary.assets.find(asset => asset.folder === "faces");
+            const pictureAsset = context.assetLibrary.assets.find(asset => asset.folder === "pictures");
+            const characterAsset = context.assetLibrary.assets.find(asset => asset.folder === "characters");
+            const actorOwner = context.assetLibrary.owners.actors[0];
+            const itemOwner = context.assetLibrary.owners.items[0];
+            const npcOwner = context.assetLibrary.owners.npcs[0];
+            assert.ok(faceAsset, "Expected at least one face asset in the project.");
+            assert.ok(pictureAsset, "Expected at least one picture asset in the project.");
+            assert.ok(characterAsset, "Expected at least one character asset in the project.");
+            assert.ok(actorOwner, "Expected at least one actor owner.");
+            assert.ok(itemOwner, "Expected at least one item owner.");
+            assert.ok(npcOwner, "Expected at least one NPC owner.");
+
+            await postJson("http://127.0.0.1:43115/project/asset/save", {
+                projectDir: context.projectDir,
+                binding: {
+                    ownerType: "actor",
+                    ownerId: String(actorOwner.id),
+                    assetKind: "face",
+                    existingProjectPath: faceAsset.projectPath,
+                    targetFileName: faceAsset.fileName,
+                    faceIndex: 0
+                }
+            });
+
+            await postJson("http://127.0.0.1:43115/project/asset/save", {
+                projectDir: context.projectDir,
+                binding: {
+                    ownerType: "item",
+                    ownerId: String(itemOwner.id),
+                    assetKind: "item_art",
+                    existingProjectPath: pictureAsset.projectPath,
+                    targetFileName: pictureAsset.fileName
+                }
+            });
+
+            const npcBindingResult = await postJson("http://127.0.0.1:43115/project/asset/save", {
+                projectDir: context.projectDir,
+                binding: {
+                    ownerType: "npc",
+                    ownerId: String(npcOwner.id),
+                    ownerName: String(npcOwner.name || npcOwner.id),
+                    assetKind: "character",
+                    existingProjectPath: characterAsset.projectPath,
+                    targetFileName: characterAsset.fileName,
+                    characterIndex: 0
+                }
+            });
+
+            const actors = readJson(path.join(context.projectDir, "data", "Actors.json"));
+            const actor = actors.find(entry => entry && Number(entry.id) === Number(actorOwner.id));
+            assert.ok(actor, "Expected the target actor to remain present.");
+            assert.equal(actor.faceName, path.parse(faceAsset.projectPath).name);
+
+            const items = readJson(path.join(context.projectDir, "data", "Items.json"));
+            const item = items.find(entry => entry && Number(entry.id) === Number(itemOwner.id));
+            assert.ok(item, "Expected the target item to remain present.");
+            assert.match(item.note, /<AiAssetPicture:/);
+
+            const profileStore = readJson(path.join(context.projectDir, "data", "AiNpcProfiles.json"));
+            const npcProfile = (profileStore.npcs || []).find(entry => String(entry.id) === String(npcOwner.id));
+            assert.ok(npcProfile, "Expected the target NPC profile to remain present.");
+            assert.ok(
+                Array.isArray(npcProfile.assetBindings)
+                    && npcProfile.assetBindings.some(entry => entry.assetKind === "character"),
+                "Expected the NPC profile to record its bound character asset."
+            );
+
+            context.overview = npcBindingResult.overview;
+            const npcLocation = npcBindingResult.overview.npcs.find(entry => String(entry.id) === String(npcOwner.id));
+            assert.ok(npcLocation, "Expected the target NPC to remain visible in the project overview.");
+            const npcMap = readJson(mapFilePath(context.projectDir, npcLocation.mapId));
+            const npcEvent = npcMap.events[npcLocation.eventId];
+            assert.ok(npcEvent?.pages?.[0], "Expected the target NPC event page to remain present.");
+            assert.equal(npcEvent.pages[0].image.characterName, path.parse(characterAsset.projectPath).name);
+
+            const bindingStore = readJson(path.join(context.projectDir, "data", "AiAssetBindings.json"));
+            assert.ok((bindingStore.assets || []).length >= 3, "Expected asset bindings to be persisted.");
+        }
     }
 ];
 
@@ -161,6 +258,7 @@ function prepareTempProject() {
     fs.rmSync(tempProject, { recursive: true, force: true });
     fs.mkdirSync(tempProject, { recursive: true });
     fs.cpSync(path.join(rootDir, "newdata", "data"), path.join(tempProject, "data"), { recursive: true });
+    copySampleAssets();
     execFileSync("node", [
         path.join(toolsDir, "build-map-skeleton.mjs"),
         "--project",
@@ -171,6 +269,28 @@ function prepareTempProject() {
         cwd: rootDir,
         stdio: "pipe"
     });
+}
+
+function copySampleAssets() {
+    for (const folder of sampleAssetFolders) {
+        const sourceDir = path.join(rootDir, "newdata", "img", folder);
+        const targetDir = path.join(tempProject, "img", folder);
+        fs.mkdirSync(targetDir, { recursive: true });
+
+        let copied = 0;
+        for (const fileName of fs.readdirSync(sourceDir)) {
+            const sourcePath = path.join(sourceDir, fileName);
+            const stat = fs.statSync(sourcePath);
+            if (!stat.isFile()) {
+                continue;
+            }
+            fs.copyFileSync(sourcePath, path.join(targetDir, fileName));
+            copied += 1;
+            if (copied >= 3) {
+                break;
+            }
+        }
+    }
 }
 
 async function waitForHealth() {

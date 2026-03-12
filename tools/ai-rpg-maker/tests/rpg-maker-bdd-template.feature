@@ -45,6 +45,18 @@ Feature: RPG Maker MZ AI workbench behavior
     And the export should include ordered message history
     And the export should include the export timestamp
 
+  Scenario: Asset binding assigns a generated visual to a target owner
+    Given a generated or imported asset exists at "<asset_path>"
+    When I bind that asset as "<asset_kind>" to "<owner_type>" "<owner_id>"
+    Then the asset binding index should record "<owner_type>" "<owner_id>"
+    And the related RPG Maker project data should reference "<asset_path>" where supported
+
+  Scenario: Asset library exposes reusable project visuals
+    Given the project already contains imported images under "img/faces", "img/characters", or "img/pictures"
+    When I load the asset library view
+    Then the workbench should show the discovered project asset files
+    And the workbench should let me bind one of those assets to an actor, NPC, or item
+
   Scenario: Backup restore rolls back generated changes
     Given I applied AI-generated content to the project
     When I restore the latest backup
