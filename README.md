@@ -11,6 +11,8 @@ AI workbench for RPG Maker MZ with:
 - drag-and-drop NPC relocation between maps and submaps
 - a visual stage editor for conditional NPC dialogue states
 - an asset library for browsing local project images and binding them to actors, NPCs, and items
+- a Database Studio for actors, items, weapons, armors, and skills
+- an Event Composer for reusable event templates and conditioned map events
 - NPC profile and quest-state generation
 - common event and item scaffolding
 - BDD-style feature templates and smoke tests for core local behaviors
@@ -53,6 +55,8 @@ Both launchers will:
 - drag NPCs between maps in the tree or change their target map in the editor
 - edit background, placement, movement, tracked states, and dialogue stages
 - browse discovered project art in the asset library and bind it to actors, NPCs, or items
+- load Database Studio to edit actor backgrounds, items, equipment, and skills
+- use Event Composer to draft and apply simple conditioned event templates
 - preview generated content before writing it into the project
 - apply with automatic backup and restore support
 - run the BDD smoke suite to validate local project behaviors after major changes
@@ -75,8 +79,13 @@ Both launchers will:
 - [x] Drag-and-drop NPC relocation between maps and submaps
 - [x] Visual stage editor for conditional NPC dialogue states
 - [x] Asset library for scanning `img/faces`, `img/characters`, `img/pictures`, `img/sv_actors`, and `img/parallaxes`
-- [x] Binding an existing or imported local image to an actor, NPC, or item
+- [x] Asset preview for the currently selected project image
+- [x] Binding an existing or imported local image to an actor, NPC, item, weapon, armor, or skill
 - [x] Persisting asset ownership in `AiAssetBindings.json`
+- [x] Database Studio for editing actors, items, weapons, armors, and skills
+- [x] Actor metadata fields for backstory, personality, relationship notes, and intimate history
+- [x] Event Composer for `showPicture`, `transfer`, `commonEvent`, `treasure`, and `switchControl` templates
+- [x] Applying generated or hand-authored event templates into map event data
 - [x] Writing generated NPC, quest, and item data into RPG Maker project files
 - [x] Automatic backup before apply
 - [x] Restore from backup history
@@ -92,13 +101,15 @@ Both launchers will:
 - [ ] NPC voice output or text-to-speech
 - [ ] Creating or editing tiles visually inside the RPG Maker editor UI itself
 - [ ] Fully automatic city art, tileset art, portrait art, or costume art generation inside this tool
+- [ ] A full visual equipment/skill balance dashboard with trait and effect editors
+- [ ] Direct thumbnail gallery management for generated scene art versions
 - [ ] Visual map painting or drag-and-drop building layout editing in the workbench
 - [ ] Creating new NPC events directly from the project explorer
 - [ ] Deleting NPC events directly from the project explorer
 - [ ] Bulk multi-select editing for several NPCs at once
 - [ ] A condition preview tool that shows which dialogue stage is currently active
 - [ ] Visual quest graph editing
-- [ ] Battle database editing for skills, enemies, classes, or troop balance
+- [ ] Enemy, class, state, and troop balance editing
 - [ ] Packaging or deployment helpers for shipping a finished game
 - [ ] A native desktop app; the workbench currently runs as a local browser UI
 - [ ] A built-in model provider bundle; you still need to configure your own API endpoint and key
@@ -124,7 +135,7 @@ BDD files live in `tools/ai-rpg-maker/tests/`.
 - `rpg-maker-bdd-template.feature`
   Reusable acceptance-test template for maps, NPCs, dialogue stages, asset binding, exports, and backup flows.
 - `workbench-smoke.feature`
-  Current smoke scenarios for the local workbench behavior, including asset-library and binding coverage.
+  Current smoke scenarios for the local workbench behavior, including asset-library, database, and event-template coverage.
 - `run-bdd-smoke.mjs`
   Executable smoke runner for deterministic behaviors that do not depend on live model output.
 
@@ -137,6 +148,8 @@ node "C:\Program Files (x86)\Steam\steamapps\common\RPG Maker MZ\tools\ai-rpg-ma
 ## Current Scope
 
 - Text workflow is connected end to end
-- Image prompt generation, asset browsing, and local asset binding are supported
+- Image prompt generation, asset browsing, asset previews, and local asset binding are supported
+- Actor, item, equipment, and skill editing are supported inside the local workbench
+- Reusable event template generation and apply flows are supported for common map-event patterns
 - A real image API is not wired yet, so final image creation still depends on an external provider or manually supplied files
 - The workflow extends project data and plugins instead of patching the RPG Maker editor itself

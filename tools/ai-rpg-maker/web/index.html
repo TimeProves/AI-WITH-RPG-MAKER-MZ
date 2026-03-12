@@ -588,6 +588,58 @@
       white-space: pre-wrap;
     }
 
+    .asset-preview-shell {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .asset-preview-frame {
+      min-height: 220px;
+      border-radius: 18px;
+      border: 1px dashed var(--line);
+      background: rgba(255,255,255,0.72);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .asset-preview-frame img {
+      max-width: 100%;
+      max-height: 320px;
+      display: block;
+    }
+
+    .database-item.active {
+      background: rgba(126, 79, 39, 0.12);
+      border-color: rgba(126, 79, 39, 0.32);
+    }
+
+    .db-editor-grid,
+    .composer-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .asset-hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .composer-shell {
+      display: grid;
+      grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+      gap: 18px;
+      padding: 22px;
+    }
+
     .asset-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -660,7 +712,8 @@
         grid-template-columns: 1fr;
       }
 
-      .asset-shell {
+      .asset-shell,
+      .composer-shell {
         grid-template-columns: 1fr;
       }
     }
@@ -675,7 +728,7 @@
         grid-template-columns: 1fr;
       }
 
-      .editor-grid, .editor-row, .editor-row-3, .check-grid, .asset-grid {
+      .editor-grid, .editor-row, .editor-row-3, .check-grid, .asset-grid, .stat-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -735,6 +788,7 @@
         <button id="loadBackupsBtn" class="ghost">Refresh Backups</button>
         <button id="loadOverviewBtn" class="ghost">Load Project Overview</button>
         <button id="loadAssetsBtn" class="ghost">Load Asset Library</button>
+        <button id="loadDatabaseBtn" class="ghost">Load Database Studio</button>
       </div>
 
       <div id="status" class="status">Start with preview. Once the generated structure looks right, apply it into the target project.</div>
@@ -778,6 +832,12 @@
           <div class="asset-column">
             <section class="editor-section">
               <h3>Asset Library</h3>
+              <div class="asset-preview-shell">
+                <div class="asset-preview-frame">
+                  <img id="assetPreviewImage" alt="Selected asset preview">
+                </div>
+                <div id="assetPreviewMeta" class="subtle">Select an asset to preview its image, kind, and current bindings.</div>
+              </div>
               <div id="assetList" class="asset-list list">
                 <div class="empty-state">Load the asset library to browse project images and existing bindings.</div>
               </div>
@@ -805,6 +865,9 @@
                     <option value="npc">NPC</option>
                     <option value="actor">Actor</option>
                     <option value="item">Item</option>
+                    <option value="weapon">Weapon</option>
+                    <option value="armor">Armor</option>
+                    <option value="skill">Skill</option>
                   </select>
                 </div>
                 <div class="field">
@@ -862,6 +925,69 @@
               <div class="subtle">Use an existing project image, or import a local image file into the correct RPG Maker folder and bind it to an NPC, actor, or item.</div>
             </section>
           </div>
+        </div>
+      </article>
+
+      <article class="panel studio">
+        <div class="card-head">
+          <h3>Database Studio</h3>
+          <div id="databasePills" class="badge-row"></div>
+        </div>
+        <div class="studio-shell">
+          <div class="tree-panel">
+            <section class="editor-section">
+              <div class="editor-row">
+                <div class="field">
+                  <label for="dbCategory">Database Type</label>
+                  <select id="dbCategory">
+                    <option value="actors">Actors</option>
+                    <option value="items">Items</option>
+                    <option value="weapons">Weapons</option>
+                    <option value="armors">Armors</option>
+                    <option value="skills">Skills</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="dbGeneratePrompt">AI Draft Prompt</label>
+                  <textarea id="dbGeneratePrompt" placeholder="Example: Create a gothic evening dress armor with charm and magic defense bonuses, or a moonlit dance skill for the heroine."></textarea>
+                </div>
+              </div>
+              <div class="editor-actions">
+                <button id="generateDbDraftBtn" class="ghost">Generate Draft</button>
+                <button id="createDbEntryBtn" class="ghost">Create New Entry</button>
+              </div>
+              <div id="databaseList" class="list">
+                <div class="empty-state">Load Database Studio to browse actors, items, weapons, armors, and skills.</div>
+              </div>
+            </section>
+          </div>
+          <div id="databaseDetailPanel" class="detail-panel">
+            <div class="empty-state">Select a database entry to edit its fields, stats, notes, and asset-related metadata.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel studio">
+        <div class="card-head">
+          <h3>Event Composer</h3>
+          <div id="eventPills" class="badge-row"></div>
+        </div>
+        <div class="composer-shell">
+          <section class="editor-section">
+            <div class="field">
+              <label for="eventPromptInput">AI Event Prompt</label>
+              <textarea id="eventPromptInput" placeholder="Example: Create an event at the palace gate that only triggers after switch 3 is ON, shows a ballroom CG, and then calls the royal audience common event."></textarea>
+            </div>
+            <div class="editor-actions">
+              <button id="generateEventTemplateBtn" class="ghost">Generate Event Draft</button>
+              <button id="useSelectedAssetForEventBtn" class="ghost">Use Selected Asset</button>
+            </div>
+          </section>
+          <section class="editor-section">
+            <div id="eventTemplatePanel" class="detail-panel">
+              <div class="empty-state">Generate or compose an event template here, then apply it to a map.</div>
+            </div>
+          </section>
         </div>
       </article>
 
@@ -931,6 +1057,7 @@
       loadBackupsBtn: document.getElementById("loadBackupsBtn"),
       loadOverviewBtn: document.getElementById("loadOverviewBtn"),
       loadAssetsBtn: document.getElementById("loadAssetsBtn"),
+      loadDatabaseBtn: document.getElementById("loadDatabaseBtn"),
       status: document.getElementById("status"),
       heroTitle: document.getElementById("heroTitle"),
       heroText: document.getElementById("heroText"),
@@ -945,6 +1072,8 @@
       backupPills: document.getElementById("backupPills"),
       overviewPills: document.getElementById("overviewPills"),
       assetPills: document.getElementById("assetPills"),
+      databasePills: document.getElementById("databasePills"),
+      eventPills: document.getElementById("eventPills"),
       mapList: document.getElementById("mapList"),
       npcList: document.getElementById("npcList"),
       contentList: document.getElementById("contentList"),
@@ -954,6 +1083,8 @@
       projectTree: document.getElementById("projectTree"),
       detailPanel: document.getElementById("detailPanel"),
       assetList: document.getElementById("assetList"),
+      assetPreviewImage: document.getElementById("assetPreviewImage"),
+      assetPreviewMeta: document.getElementById("assetPreviewMeta"),
       assetPromptInput: document.getElementById("assetPromptInput"),
       assetPromptOutput: document.getElementById("assetPromptOutput"),
       generateAssetPromptsBtn: document.getElementById("generateAssetPromptsBtn"),
@@ -968,16 +1099,29 @@
       assetFaceIndex: document.getElementById("assetFaceIndex"),
       assetCharacterIndex: document.getElementById("assetCharacterIndex"),
       assetBindPrompt: document.getElementById("assetBindPrompt"),
-      bindAssetBtn: document.getElementById("bindAssetBtn")
+      bindAssetBtn: document.getElementById("bindAssetBtn"),
+      dbCategory: document.getElementById("dbCategory"),
+      dbGeneratePrompt: document.getElementById("dbGeneratePrompt"),
+      generateDbDraftBtn: document.getElementById("generateDbDraftBtn"),
+      createDbEntryBtn: document.getElementById("createDbEntryBtn"),
+      databaseList: document.getElementById("databaseList"),
+      databaseDetailPanel: document.getElementById("databaseDetailPanel"),
+      eventPromptInput: document.getElementById("eventPromptInput"),
+      generateEventTemplateBtn: document.getElementById("generateEventTemplateBtn"),
+      useSelectedAssetForEventBtn: document.getElementById("useSelectedAssetForEventBtn"),
+      eventTemplatePanel: document.getElementById("eventTemplatePanel")
     };
 
     let latestPreview = null;
     let latestBackups = [];
     let latestOverview = null;
     let latestAssetLibrary = null;
+    let latestDatabase = null;
+    let latestEventTemplate = null;
     let selectedNpcKey = null;
     let draggedNpcKey = null;
     let selectedAssetId = null;
+    let selectedDbId = null;
 
     elements.previewBtn.addEventListener("click", onPreview);
     elements.applyBtn.addEventListener("click", onApply);
@@ -986,9 +1130,15 @@
     elements.loadBackupsBtn.addEventListener("click", loadBackups);
     elements.loadOverviewBtn.addEventListener("click", onLoadOverview);
     elements.loadAssetsBtn.addEventListener("click", onLoadAssets);
+    elements.loadDatabaseBtn.addEventListener("click", onLoadDatabase);
     elements.generateAssetPromptsBtn.addEventListener("click", onGenerateAssetPrompts);
     elements.bindAssetBtn.addEventListener("click", onSaveAssetBinding);
     elements.assetOwnerType.addEventListener("change", syncAssetOwnerOptions);
+    elements.dbCategory.addEventListener("change", () => renderDatabaseStudio(latestDatabase));
+    elements.generateDbDraftBtn.addEventListener("click", onGenerateDbDraft);
+    elements.createDbEntryBtn.addEventListener("click", onCreateDbEntry);
+    elements.generateEventTemplateBtn.addEventListener("click", onGenerateEventTemplate);
+    elements.useSelectedAssetForEventBtn.addEventListener("click", useSelectedAssetForEvent);
 
     function fillExample() {
       elements.prompt.value = "Create a royal capital with a palace in the north, tavern in the southwest, inn in the southeast, and the hero house on the east side. Add one main quest, two side quests, and key NPC dialogue that changes with story progress.";
@@ -1013,6 +1163,7 @@
         if (elements.projectDir.value.trim()) {
           await loadBackups();
           await loadAssets(true);
+          await loadDatabase(true);
         }
         setStatus("Preview generated. Review the structure and diff preview, then apply when ready.", "ok");
       } catch (error) {
@@ -1053,6 +1204,7 @@
         await loadBackups();
         await loadOverview(true);
         await loadAssets(true);
+        await loadDatabase(true);
         setStatus("Apply complete. Maps, AI profiles, quest events, and optional item data were written into the project.", "ok");
       } catch (error) {
         setStatus(error.message || String(error), "error");
@@ -1079,6 +1231,7 @@
         await loadBackups();
         await loadOverview(true);
         await loadAssets(true);
+        await loadDatabase(true);
         setStatus("Backup restored. The last generated apply changes were rolled back.", "ok");
       } catch (error) {
         setStatus(error.message || String(error), "error");
@@ -1124,6 +1277,19 @@
       }
     }
 
+    async function onLoadDatabase() {
+      setBusy(true);
+      setStatus("Loading actors, items, equipment, skills, and common event references.", "");
+      try {
+        await loadDatabase(false);
+        setStatus("Database Studio loaded. You can now edit actors, items, equipment, and skills.", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
     async function loadOverview(preserveSelection) {
       const projectDir = elements.projectDir.value.trim();
       if (!projectDir) {
@@ -1148,6 +1314,8 @@
         selectedAssetId = null;
         setPills(elements.assetPills, []);
         elements.assetList.innerHTML = '<div class="empty-state">Enter a project directory first, then load the asset library.</div>';
+        elements.assetPreviewImage.removeAttribute("src");
+        elements.assetPreviewMeta.textContent = "Select an asset to preview its image, kind, and current bindings.";
         syncAssetOwnerOptions();
         return;
       }
@@ -1159,6 +1327,29 @@
         ? previousAssetId
         : null;
       renderAssetLibrary(latestAssetLibrary);
+    }
+
+    async function loadDatabase(preserveSelection) {
+      const projectDir = elements.projectDir.value.trim();
+      if (!projectDir) {
+        latestDatabase = null;
+        selectedDbId = null;
+        setPills(elements.databasePills, []);
+        elements.databaseList.innerHTML = '<div class="empty-state">Enter a project directory first, then load Database Studio.</div>';
+        elements.databaseDetailPanel.innerHTML = '<div class="empty-state">Select a database entry to edit its fields, stats, notes, and asset-related metadata.</div>';
+        renderEventTemplateEditor(null);
+        return;
+      }
+
+      const previousId = preserveSelection ? selectedDbId : null;
+      const result = await postJson("/project/database", { projectDir });
+      latestDatabase = result.database || null;
+      const selectedCollection = getDatabaseCollection(latestDatabase, elements.dbCategory.value);
+      selectedDbId = previousId && selectedCollection.some(entry => String(entry.id) === String(previousId))
+        ? previousId
+        : (selectedCollection[0] ? String(selectedCollection[0].id) : null);
+      renderDatabaseStudio(latestDatabase);
+      renderEventTemplateEditor(latestEventTemplate);
     }
 
     function collectPayload() {
@@ -1309,6 +1500,8 @@ ${escapeHtml(categoryText || "")}</small>
       if (!library) {
         setPills(elements.assetPills, []);
         elements.assetList.innerHTML = '<div class="empty-state">Load the asset library to browse project images and existing bindings.</div>';
+        elements.assetPreviewImage.removeAttribute("src");
+        elements.assetPreviewMeta.textContent = "Select an asset to preview its image, kind, and current bindings.";
         syncAssetOwnerOptions();
         return;
       }
@@ -1341,7 +1534,548 @@ ${escapeHtml(categoryText || "")}</small>
         });
       }
 
+      const selectedAsset = Array.isArray(library.assets)
+        ? library.assets.find(asset => asset.id === selectedAssetId) || library.assets[0] || null
+        : null;
+      if (selectedAsset && !selectedAssetId) {
+        selectedAssetId = selectedAsset.id;
+      }
+      renderAssetPreview(selectedAsset);
       syncAssetOwnerOptions();
+    }
+
+    function renderAssetPreview(asset) {
+      if (!asset || !elements.projectDir.value.trim()) {
+        elements.assetPreviewImage.removeAttribute("src");
+        elements.assetPreviewMeta.textContent = "Select an asset to preview its image, kind, and current bindings.";
+        return;
+      }
+
+      const query = new URLSearchParams({
+        projectDir: elements.projectDir.value.trim(),
+        projectPath: asset.projectPath
+      });
+      elements.assetPreviewImage.src = `/project/asset-file?${query.toString()}`;
+      const bindings = Array.isArray(asset.bindings) && asset.bindings.length
+        ? asset.bindings.map(binding => `${binding.ownerType}:${binding.ownerId}`).join(", ")
+        : "No bindings yet";
+      elements.assetPreviewMeta.textContent = `${asset.projectPath} | ${asset.assetKind} | ${bindings}`;
+    }
+
+    function renderDatabaseStudio(database) {
+      const category = elements.dbCategory.value;
+      if (!database) {
+        setPills(elements.databasePills, []);
+        elements.databaseList.innerHTML = '<div class="empty-state">Load Database Studio to browse actors, items, weapons, armors, and skills.</div>';
+        elements.databaseDetailPanel.innerHTML = '<div class="empty-state">Select a database entry to edit its fields, stats, notes, and asset-related metadata.</div>';
+        return;
+      }
+
+      setPills(elements.databasePills, [
+        `${database.summary.actors || 0} actors`,
+        `${database.summary.items || 0} items`,
+        `${database.summary.weapons || 0} weapons`,
+        `${database.summary.armors || 0} armors`,
+        `${database.summary.skills || 0} skills`
+      ]);
+
+      const entries = getDatabaseCollection(database, category);
+      elements.databaseList.innerHTML = "";
+      if (!entries.length) {
+        elements.databaseList.innerHTML = '<div class="empty-state">No entries found for this database type.</div>';
+      } else {
+        entries.forEach(entry => {
+          const button = document.createElement("button");
+          button.className = "item database-item" + (String(entry.id) === String(selectedDbId) ? " active" : "");
+          button.innerHTML = `<strong>${escapeHtml(entry.name || `${category} ${entry.id}`)}</strong><small>ID ${escapeHtml(entry.id)}</small>`;
+          button.addEventListener("click", () => {
+            selectedDbId = String(entry.id);
+            renderDatabaseStudio(latestDatabase);
+          });
+          elements.databaseList.appendChild(button);
+        });
+      }
+
+      const selected = entries.find(entry => String(entry.id) === String(selectedDbId)) || entries[0] || null;
+      if (selected && !selectedDbId) {
+        selectedDbId = String(selected.id);
+      }
+      renderDatabaseEditor(category, selected);
+    }
+
+    function getDatabaseCollection(database, category) {
+      if (!database) {
+        return [];
+      }
+      return Array.isArray(database[category]) ? database[category] : [];
+    }
+
+    function renderDatabaseEditor(category, entry) {
+      if (!entry) {
+        elements.databaseDetailPanel.innerHTML = '<div class="empty-state">Select a database entry to edit its fields, stats, notes, and asset-related metadata.</div>';
+        return;
+      }
+
+      const title = category.slice(0, -1);
+      const body = renderDatabaseEditorBody(category, entry);
+      elements.databaseDetailPanel.innerHTML = `
+        <div class="editor-shell">
+          <div class="editor-header">
+            <div>
+              <h3>${escapeHtml(entry.name || `${title} ${entry.id}`)}</h3>
+              <p>${escapeHtml(title)} · ID ${escapeHtml(entry.id)}</p>
+            </div>
+            <div class="editor-actions">
+              <button id="saveDatabaseEntryBtn" class="secondary">Save ${escapeHtml(title)}</button>
+            </div>
+          </div>
+          <div class="db-editor-grid">
+            ${body}
+          </div>
+        </div>
+      `;
+      document.getElementById("saveDatabaseEntryBtn").addEventListener("click", onSaveDatabaseEntry);
+    }
+
+    function renderDatabaseEditorBody(category, entry) {
+      switch (category) {
+        case "actors":
+          return `
+            <section class="editor-section">
+              <h3>Core Identity</h3>
+              <div class="editor-row">
+                <div class="field"><label>Name</label><input id="dbName" type="text" value="${escapeAttr(entry.name || "")}"></div>
+                <div class="field"><label>Nickname</label><input id="dbNickname" type="text" value="${escapeAttr(entry.nickname || "")}"></div>
+              </div>
+              <div class="editor-row-3">
+                <div class="field"><label>Class ID</label><input id="dbClassId" type="number" value="${escapeAttr(entry.classId || 1)}"></div>
+                <div class="field"><label>Initial Level</label><input id="dbInitialLevel" type="number" value="${escapeAttr(entry.initialLevel || 1)}"></div>
+                <div class="field"><label>Max Level</label><input id="dbMaxLevel" type="number" value="${escapeAttr(entry.maxLevel || 99)}"></div>
+              </div>
+              <div class="field"><label>Profile</label><textarea id="dbProfile">${escapeHtml(entry.profile || "")}</textarea></div>
+            </section>
+            <section class="editor-section">
+              <h3>Visuals</h3>
+              <div class="editor-row">
+                <div class="field"><label>Face Name</label><input id="dbFaceName" type="text" value="${escapeAttr(entry.faceName || "")}"></div>
+                <div class="field"><label>Face Index</label><input id="dbFaceIndex" type="number" value="${escapeAttr(entry.faceIndex || 0)}"></div>
+              </div>
+              <div class="editor-row">
+                <div class="field"><label>Character Name</label><input id="dbCharacterName" type="text" value="${escapeAttr(entry.characterName || "")}"></div>
+                <div class="field"><label>Character Index</label><input id="dbCharacterIndex" type="number" value="${escapeAttr(entry.characterIndex || 0)}"></div>
+              </div>
+              <div class="field"><label>Battler Name</label><input id="dbBattlerName" type="text" value="${escapeAttr(entry.battlerName || "")}"></div>
+              <div class="asset-hint">Bound portrait path: ${escapeHtml(entry.assetPicture || "None")}</div>
+            </section>
+            <section class="editor-section">
+              <h3>Character Background</h3>
+              <div class="field"><label>Backstory</label><textarea id="dbBackstory">${escapeHtml(entry.backstory || "")}</textarea></div>
+              <div class="field"><label>Personality</label><textarea id="dbPersonality">${escapeHtml(entry.personality || "")}</textarea></div>
+              <div class="field"><label>Relationship Notes</label><textarea id="dbRelationshipNotes">${escapeHtml(entry.relationshipNotes || "")}</textarea></div>
+              <div class="field"><label>Intimate History</label><textarea id="dbIntimateHistory">${escapeHtml(entry.intimateHistory || "")}</textarea></div>
+              <div class="field"><label>Raw Note</label><textarea id="dbNote">${escapeHtml(entry.note || "")}</textarea></div>
+            </section>
+          `;
+        case "items":
+          return renderCommonDatabaseSection(entry, "Item", [
+            ['dbItypeId', 'Item Type ID', entry.itypeId || 1],
+            ['dbPrice', 'Price', entry.price || 0],
+            ['dbOccasion', 'Occasion', entry.occasion || 0],
+            ['dbScope', 'Scope', entry.scope || 0],
+            ['dbSpeed', 'Speed', entry.speed || 0],
+            ['dbSuccessRate', 'Success Rate', entry.successRate || 100]
+          ], entry.assetPicture || "None");
+        case "weapons":
+          return renderEquipmentEditor(entry, "Weapon", "dbTypeId", "Weapon Type ID");
+        case "armors":
+          return renderEquipmentEditor(entry, "Armor", "dbTypeId", "Armor Type ID");
+        case "skills":
+          return `
+            ${renderCommonDatabaseSection(entry, "Skill", [
+              ['dbStypeId', 'Skill Type ID', entry.stypeId || 1],
+              ['dbAnimationId', 'Animation ID', entry.animationId || 0],
+              ['dbMpCost', 'MP Cost', entry.mpCost || 0],
+              ['dbTpCost', 'TP Cost', entry.tpCost || 0],
+              ['dbOccasion', 'Occasion', entry.occasion || 0],
+              ['dbScope', 'Scope', entry.scope || 0],
+              ['dbSpeed', 'Speed', entry.speed || 0],
+              ['dbRepeats', 'Repeats', entry.repeats || 1],
+              ['dbSuccessRate', 'Success Rate', entry.successRate || 100],
+              ['dbHitType', 'Hit Type', entry.hitType || 0]
+            ], entry.assetPicture || "None")}
+            <section class="editor-section">
+              <h3>Damage</h3>
+              <div class="editor-row">
+                <div class="field"><label>Damage Type</label><input id="dbDamageType" type="number" value="${escapeAttr(entry.damage?.type || 0)}"></div>
+                <div class="field"><label>Element ID</label><input id="dbElementId" type="number" value="${escapeAttr(entry.damage?.elementId || 0)}"></div>
+                <div class="field"><label>Variance</label><input id="dbVariance" type="number" value="${escapeAttr(entry.damage?.variance || 20)}"></div>
+              </div>
+              <div class="field"><label>Formula</label><textarea id="dbFormula">${escapeHtml(entry.damage?.formula || "0")}</textarea></div>
+              <label class="check-card" for="dbCritical"><span>Critical Allowed</span><input id="dbCritical" type="checkbox"${entry.damage?.critical ? " checked" : ""}></label>
+            </section>
+          `;
+        default:
+          return '<div class="empty-state">Unsupported database type.</div>';
+      }
+    }
+
+    function renderCommonDatabaseSection(entry, title, numberFields, assetPicture) {
+      return `
+        <section class="editor-section">
+          <h3>${escapeHtml(title)} Core</h3>
+          <div class="editor-row">
+            <div class="field"><label>Name</label><input id="dbName" type="text" value="${escapeAttr(entry.name || "")}"></div>
+            <div class="field"><label>Icon Index</label><input id="dbIconIndex" type="number" value="${escapeAttr(entry.iconIndex || 0)}"></div>
+          </div>
+          <div class="field"><label>Description</label><textarea id="dbDescription">${escapeHtml(entry.description || "")}</textarea></div>
+          <div class="stat-grid">
+            ${numberFields.map(([id, label, value]) => `<div class="field"><label>${escapeHtml(label)}</label><input id="${escapeAttr(id)}" type="number" value="${escapeAttr(value)}"></div>`).join("")}
+          </div>
+          <div class="field"><label>Note</label><textarea id="dbNote">${escapeHtml(entry.note || "")}</textarea></div>
+          <div class="asset-hint">Bound picture path: ${escapeHtml(assetPicture)}</div>
+        </section>
+      `;
+    }
+
+    function renderEquipmentEditor(entry, title, typeFieldId, typeLabel) {
+      return `
+        ${renderCommonDatabaseSection(entry, title, [
+          [typeFieldId, typeLabel, entry.typeId || 1],
+          ['dbEtypeId', 'Equip Type ID', entry.etypeId || 1],
+          ['dbAnimationId', 'Animation ID', entry.animationId || 0],
+          ['dbPrice', 'Price', entry.price || 0]
+        ], entry.assetPicture || "None")}
+        <section class="editor-section">
+          <h3>Parameters</h3>
+          <div class="stat-grid">
+            ${['MHP', 'MMP', 'ATK', 'DEF', 'MAT', 'MDF', 'AGI', 'LUK'].map((label, index) => `<div class="field"><label>${label}</label><input id="dbParam${index}" type="number" value="${escapeAttr((entry.params || [])[index] || 0)}"></div>`).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    async function onGenerateDbDraft() {
+      const prompt = elements.dbGeneratePrompt.value.trim();
+      if (!prompt) {
+        setStatus("Enter a database draft prompt first.", "error");
+        return;
+      }
+      setBusy(true);
+      setStatus("Generating an AI draft for the selected database category.", "");
+      try {
+        const result = await postJson("/project/database/generate", {
+          category: elements.dbCategory.value.replace(/s$/, ""),
+          prompt
+        });
+        const draft = result.draft || {};
+        selectedDbId = null;
+        renderDatabaseEditor(elements.dbCategory.value, { id: "", ...draft });
+        setStatus("Draft generated. Review and save it into the project when ready.", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function onCreateDbEntry() {
+      selectedDbId = null;
+      renderDatabaseEditor(elements.dbCategory.value, { id: "" });
+      setStatus("Blank entry created in the editor. Fill the fields, then save.", "ok");
+    }
+
+    async function onSaveDatabaseEntry() {
+      const projectDir = elements.projectDir.value.trim();
+      if (!projectDir || !latestDatabase) {
+        setStatus("Load a project and Database Studio before saving.", "error");
+        return;
+      }
+
+      const category = elements.dbCategory.value;
+      const payload = readDatabaseEditorPayload(category);
+      const mode = selectedDbId ? "update" : "create";
+
+      setBusy(true);
+      setStatus(`Saving ${category.slice(0, -1)} data into the RPG Maker database.`, "");
+      try {
+        const result = await postJson("/project/database/save", {
+          projectDir,
+          category: category.replace(/s$/, ""),
+          mode,
+          entry: payload
+        });
+        latestDatabase = result.database || latestDatabase;
+        latestOverview = result.overview || latestOverview;
+        latestAssetLibrary = result.assets || latestAssetLibrary;
+        selectedDbId = String(result.saved.id);
+        renderDatabaseStudio(latestDatabase);
+        if (latestOverview) {
+          renderProjectOverview(latestOverview);
+        }
+        if (latestAssetLibrary) {
+          renderAssetLibrary(latestAssetLibrary);
+        }
+        setStatus(`${category.slice(0, -1)} saved into the project database.`, "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function readDatabaseEditorPayload(category) {
+      const payload = {
+        id: selectedDbId ? Number(selectedDbId) : 0,
+        name: valueOf("dbName"),
+        description: valueOf("dbDescription"),
+        note: valueOf("dbNote"),
+        iconIndex: numberOf("dbIconIndex")
+      };
+
+      if (category === "actors") {
+        return {
+          ...payload,
+          nickname: valueOf("dbNickname"),
+          profile: valueOf("dbProfile"),
+          classId: numberOf("dbClassId", 1),
+          initialLevel: numberOf("dbInitialLevel", 1),
+          maxLevel: numberOf("dbMaxLevel", 99),
+          faceName: valueOf("dbFaceName"),
+          faceIndex: numberOf("dbFaceIndex", 0),
+          characterName: valueOf("dbCharacterName"),
+          characterIndex: numberOf("dbCharacterIndex", 0),
+          battlerName: valueOf("dbBattlerName"),
+          backstory: valueOf("dbBackstory"),
+          personality: valueOf("dbPersonality"),
+          relationshipNotes: valueOf("dbRelationshipNotes"),
+          intimateHistory: valueOf("dbIntimateHistory")
+        };
+      }
+
+      if (category === "items") {
+        return {
+          ...payload,
+          itypeId: numberOf("dbItypeId", 1),
+          price: numberOf("dbPrice", 0),
+          occasion: numberOf("dbOccasion", 0),
+          scope: numberOf("dbScope", 0),
+          speed: numberOf("dbSpeed", 0),
+          successRate: numberOf("dbSuccessRate", 100)
+        };
+      }
+
+      if (category === "weapons" || category === "armors") {
+        return {
+          ...payload,
+          typeId: numberOf("dbTypeId", 1),
+          etypeId: numberOf("dbEtypeId", category === "weapons" ? 1 : 4),
+          animationId: numberOf("dbAnimationId", 0),
+          price: numberOf("dbPrice", 0),
+          params: Array.from({ length: 8 }, (_, index) => numberOf(`dbParam${index}`, 0))
+        };
+      }
+
+      if (category === "skills") {
+        return {
+          ...payload,
+          stypeId: numberOf("dbStypeId", 1),
+          animationId: numberOf("dbAnimationId", 0),
+          mpCost: numberOf("dbMpCost", 0),
+          tpCost: numberOf("dbTpCost", 0),
+          occasion: numberOf("dbOccasion", 0),
+          scope: numberOf("dbScope", 1),
+          speed: numberOf("dbSpeed", 0),
+          repeats: numberOf("dbRepeats", 1),
+          successRate: numberOf("dbSuccessRate", 100),
+          hitType: numberOf("dbHitType", 0),
+          damage: {
+            type: numberOf("dbDamageType", 0),
+            elementId: numberOf("dbElementId", 0),
+            formula: valueOf("dbFormula") || "0",
+            variance: numberOf("dbVariance", 20),
+            critical: checkedOf("dbCritical")
+          }
+        };
+      }
+
+      return payload;
+    }
+
+    function renderEventTemplateEditor(template) {
+      const maps = latestOverview && Array.isArray(latestOverview.maps) ? latestOverview.maps : [];
+      const commonEvents = latestDatabase && Array.isArray(latestDatabase.commonEvents) ? latestDatabase.commonEvents : [];
+      const event = template || {
+        name: "AI Event",
+        templateType: "showPicture",
+        mapId: maps[0] ? maps[0].id : 1,
+        x: 1,
+        y: 1,
+        trigger: 0,
+        priorityType: 1,
+        conditions: { switchId: 0, switchState: "on", variableId: 0, variableOp: ">=", variableValue: 0 },
+        config: {},
+        summary: ""
+      };
+
+      setPills(elements.eventPills, [
+        `${maps.length} maps`,
+        `${commonEvents.length} common events`,
+        event.templateType || "template"
+      ]);
+
+      elements.eventTemplatePanel.innerHTML = `
+        <div class="db-editor-grid">
+          <section class="editor-section">
+            <h3>Event Template</h3>
+            <div class="editor-row">
+              <div class="field"><label>Event Name</label><input id="eventName" type="text" value="${escapeAttr(event.name || "")}"></div>
+              <div class="field"><label>Template Type</label>
+                <select id="eventTemplateType">
+                  ${["showPicture", "transfer", "commonEvent", "treasure", "switchControl"].map(type => `<option value="${escapeAttr(type)}"${type === event.templateType ? " selected" : ""}>${escapeHtml(type)}</option>`).join("")}
+                </select>
+              </div>
+            </div>
+            <div class="editor-row-3">
+              <div class="field"><label>Map</label><select id="eventMapId">${maps.map(map => `<option value="${escapeAttr(map.id)}"${Number(map.id) === Number(event.mapId) ? " selected" : ""}>${escapeHtml(map.path || map.name)}</option>`).join("")}</select></div>
+              <div class="field"><label>X</label><input id="eventX" type="number" value="${escapeAttr(event.x || 1)}"></div>
+              <div class="field"><label>Y</label><input id="eventY" type="number" value="${escapeAttr(event.y || 1)}"></div>
+            </div>
+            <div class="editor-row">
+              <div class="field"><label>Trigger</label><select id="eventTrigger">${renderSelectOptions([[0,"Action Button"],[1,"Player Touch"],[2,"Event Touch"],[3,"Autorun"],[4,"Parallel"]], event.trigger || 0)}</select></div>
+              <div class="field"><label>Priority</label><select id="eventPriorityType">${renderSelectOptions([[0,"Below"],[1,"Same"],[2,"Above"]], event.priorityType || 1)}</select></div>
+            </div>
+            <div class="field"><label>Summary</label><textarea id="eventSummary">${escapeHtml(event.summary || "")}</textarea></div>
+          </section>
+          <section class="editor-section">
+            <h3>Conditions</h3>
+            <div class="editor-row">
+              <div class="field"><label>Switch ID</label><input id="eventSwitchId" type="number" value="${escapeAttr(event.conditions?.switchId || 0)}"></div>
+              <div class="field"><label>Switch State</label><select id="eventSwitchState">${["on","off"].map(state => `<option value="${state}"${state === event.conditions?.switchState ? " selected" : ""}>${state.toUpperCase()}</option>`).join("")}</select></div>
+            </div>
+            <div class="editor-row">
+              <div class="field"><label>Variable ID</label><input id="eventVariableId" type="number" value="${escapeAttr(event.conditions?.variableId || 0)}"></div>
+              <div class="field"><label>Variable Op</label><select id="eventVariableOp">${[">=","==","<=",">","<"].map(op => `<option value="${escapeAttr(op)}"${op === event.conditions?.variableOp ? " selected" : ""}>${escapeHtml(op)}</option>`).join("")}</select></div>
+              <div class="field"><label>Variable Value</label><input id="eventVariableValue" type="number" value="${escapeAttr(event.conditions?.variableValue || 0)}"></div>
+            </div>
+          </section>
+          <section class="editor-section">
+            <h3>Template Config</h3>
+            <div class="editor-row">
+              <div class="field"><label>Picture Path</label><input id="eventPicturePath" type="text" value="${escapeAttr(event.config?.picturePath || "")}" placeholder="img/pictures/ballroom_scene.png"></div>
+              <div class="field"><label>Common Event</label><select id="eventCommonEventId"><option value="0">None</option>${commonEvents.map(entry => `<option value="${escapeAttr(entry.id)}"${Number(entry.id) === Number(event.config?.commonEventId || 0) ? " selected" : ""}>${escapeHtml(entry.name)}</option>`).join("")}</select></div>
+            </div>
+            <div class="editor-row">
+              <div class="field"><label>Target Map ID</label><input id="eventTargetMapId" type="number" value="${escapeAttr(event.config?.targetMapId || 0)}"></div>
+              <div class="field"><label>Target X</label><input id="eventTargetX" type="number" value="${escapeAttr(event.config?.targetX || 0)}"></div>
+              <div class="field"><label>Target Y</label><input id="eventTargetY" type="number" value="${escapeAttr(event.config?.targetY || 0)}"></div>
+            </div>
+            <div class="editor-row">
+              <div class="field"><label>Item ID</label><input id="eventItemId" type="number" value="${escapeAttr(event.config?.itemId || 0)}"></div>
+              <div class="field"><label>Amount</label><input id="eventAmount" type="number" value="${escapeAttr(event.config?.amount || 1)}"></div>
+              <div class="field"><label>Switch To Control</label><input id="eventControlSwitchId" type="number" value="${escapeAttr(event.config?.switchId || 0)}"></div>
+            </div>
+            <div class="editor-row">
+              <div class="field"><label>Switch Value</label><select id="eventControlSwitchValue">${['true','false'].map(value => `<option value="${value}"${String(event.config?.switchValue ?? true) === value ? " selected" : ""}>${value}</option>`).join("")}</select></div>
+              <div class="field"><label>Picture X</label><input id="eventScreenX" type="number" value="${escapeAttr(event.config?.screenX || 408)}"></div>
+              <div class="field"><label>Picture Y</label><input id="eventScreenY" type="number" value="${escapeAttr(event.config?.screenY || 312)}"></div>
+            </div>
+            <div class="field"><label>Message</label><textarea id="eventMessage">${escapeHtml(event.config?.message || "")}</textarea></div>
+          </section>
+          <div class="editor-actions">
+            <button id="applyEventTemplateBtn" class="secondary">Apply Event To Map</button>
+          </div>
+        </div>
+      `;
+      document.getElementById("applyEventTemplateBtn").addEventListener("click", onApplyEventTemplate);
+    }
+
+    async function onGenerateEventTemplate() {
+      const prompt = elements.eventPromptInput.value.trim();
+      if (!prompt) {
+        setStatus("Enter an event prompt first.", "error");
+        return;
+      }
+      setBusy(true);
+      setStatus("Generating an AI event template draft.", "");
+      try {
+        const result = await postJson("/project/event-template/generate", { prompt });
+        latestEventTemplate = result.template || null;
+        renderEventTemplateEditor(latestEventTemplate);
+        setStatus("Event template draft generated. Review it, then apply it to a target map.", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function useSelectedAssetForEvent() {
+      const asset = latestAssetLibrary && Array.isArray(latestAssetLibrary.assets)
+        ? latestAssetLibrary.assets.find(entry => entry.id === selectedAssetId)
+        : null;
+      const picturePathInput = document.getElementById("eventPicturePath");
+      if (!asset || !picturePathInput) {
+        setStatus("Select an asset and open the Event Composer first.", "error");
+        return;
+      }
+      picturePathInput.value = asset.projectPath;
+      setStatus("Selected asset copied into the event picture path field.", "ok");
+    }
+
+    async function onApplyEventTemplate() {
+      const projectDir = elements.projectDir.value.trim();
+      if (!projectDir) {
+        setStatus("Enter a project directory before applying an event template.", "error");
+        return;
+      }
+
+      const template = {
+        name: valueOf("eventName"),
+        templateType: valueOf("eventTemplateType") || "showPicture",
+        mapId: numberOf("eventMapId", 1),
+        x: numberOf("eventX", 1),
+        y: numberOf("eventY", 1),
+        trigger: numberOf("eventTrigger", 0),
+        priorityType: numberOf("eventPriorityType", 1),
+        summary: valueOf("eventSummary"),
+        conditions: {
+          switchId: numberOf("eventSwitchId", 0),
+          switchState: valueOf("eventSwitchState") || "on",
+          variableId: numberOf("eventVariableId", 0),
+          variableOp: valueOf("eventVariableOp") || ">=",
+          variableValue: numberOf("eventVariableValue", 0)
+        },
+        config: {
+          picturePath: valueOf("eventPicturePath"),
+          commonEventId: numberOf("eventCommonEventId", 0),
+          targetMapId: numberOf("eventTargetMapId", 0),
+          targetX: numberOf("eventTargetX", 0),
+          targetY: numberOf("eventTargetY", 0),
+          itemId: numberOf("eventItemId", 0),
+          amount: numberOf("eventAmount", 1),
+          switchId: numberOf("eventControlSwitchId", 0),
+          switchValue: valueOf("eventControlSwitchValue") !== "false",
+          screenX: numberOf("eventScreenX", 408),
+          screenY: numberOf("eventScreenY", 312),
+          message: valueOf("eventMessage")
+        }
+      };
+
+      setBusy(true);
+      setStatus("Applying the event template to the target map.", "");
+      try {
+        const result = await postJson("/project/event-template/apply", { projectDir, template });
+        latestEventTemplate = template;
+        latestOverview = result.overview || latestOverview;
+        if (latestOverview) {
+          renderProjectOverview(latestOverview);
+        }
+        setStatus(`Event applied on map ${result.event.mapId} with event ID ${result.event.id}.`, "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
     }
 
     function renderProjectOverview(overview) {
@@ -1910,6 +2644,21 @@ ${escapeHtml(categoryText || "")}</small>
         .filter(Boolean);
     }
 
+    function valueOf(id) {
+      const node = document.getElementById(id);
+      return node ? String(node.value || "") : "";
+    }
+
+    function numberOf(id, fallback = 0) {
+      const value = Number(valueOf(id));
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    function checkedOf(id) {
+      const node = document.getElementById(id);
+      return Boolean(node && node.checked);
+    }
+
     function renderStageCards(stages) {
       const source = Array.isArray(stages) ? stages : [];
       if (!source.length) {
@@ -2170,8 +2919,13 @@ ${escapeHtml(categoryText || "")}</small>
       elements.loadBackupsBtn.disabled = isBusy;
       elements.loadOverviewBtn.disabled = isBusy;
       elements.loadAssetsBtn.disabled = isBusy;
+      elements.loadDatabaseBtn.disabled = isBusy;
       elements.generateAssetPromptsBtn.disabled = isBusy;
       elements.bindAssetBtn.disabled = isBusy;
+      elements.generateDbDraftBtn.disabled = isBusy;
+      elements.createDbEntryBtn.disabled = isBusy;
+      elements.generateEventTemplateBtn.disabled = isBusy;
+      elements.useSelectedAssetForEventBtn.disabled = isBusy;
     }
 
     function setStatus(text, kind) {

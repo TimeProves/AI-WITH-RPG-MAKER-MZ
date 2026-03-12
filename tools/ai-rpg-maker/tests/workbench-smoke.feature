@@ -43,3 +43,20 @@ Feature: AI RPG Maker workbench local smoke behaviors
     And Items.json should contain an asset note tag for item 7
     And AiNpcProfiles.json should record the NPC character binding
     And the target NPC event should reference the bound character image
+
+  Scenario: Database Studio edits actor, equipment, and skill data
+    Given a generated city skeleton exists
+    When I load the project database snapshot
+    And I update one actor background field
+    And I update one weapon price and params
+    And I update one skill formula and MP cost
+    Then Actors.json should preserve the actor metadata note tags
+    And Weapons.json should contain the saved weapon values
+    And Skills.json should contain the saved skill values
+
+  Scenario: Applying an event template creates a conditioned map event
+    Given a generated city skeleton exists
+    When I apply a show-picture event template to the main map
+    Then the target map should contain the new event
+    And the new event should include a picture command
+    And the new event page should contain the configured switch condition

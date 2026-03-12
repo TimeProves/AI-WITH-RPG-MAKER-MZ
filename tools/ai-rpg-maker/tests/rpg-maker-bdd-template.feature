@@ -57,6 +57,18 @@ Feature: RPG Maker MZ AI workbench behavior
     Then the workbench should show the discovered project asset files
     And the workbench should let me bind one of those assets to an actor, NPC, or item
 
+  Scenario: Database Studio saves RPG Maker database records
+    Given the project contains actor, item, weapon, armor, and skill data
+    When I update one database entry through the workbench
+    Then the matching RPG Maker database file should persist the edited values
+    And related AI metadata tags should remain available for later automation
+
+  Scenario: Event Composer applies a reusable event template
+    Given I prepared an event template for a target map
+    When I apply that event template through the workbench
+    Then the target map should receive a new event entry
+    And the event page should contain the expected command sequence and conditions
+
   Scenario: Backup restore rolls back generated changes
     Given I applied AI-generated content to the project
     When I restore the latest backup

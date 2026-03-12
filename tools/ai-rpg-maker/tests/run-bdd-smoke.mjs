@@ -215,6 +215,153 @@ const scenarios = [
             const bindingStore = readJson(path.join(context.projectDir, "data", "AiAssetBindings.json"));
             assert.ok((bindingStore.assets || []).length >= 3, "Expected asset bindings to be persisted.");
         }
+    },
+    {
+        title: "Database Studio edits actor, equipment, and skill data",
+        run: async context => {
+            const snapshot = await postJson("http://127.0.0.1:43115/project/database", {
+                projectDir: context.projectDir
+            });
+            assert.ok((snapshot.database.actors || []).length >= 1, "Expected at least one actor in the database snapshot.");
+            assert.ok((snapshot.database.weapons || []).length >= 1, "Expected at least one weapon in the database snapshot.");
+            assert.ok((snapshot.database.skills || []).length >= 1, "Expected at least one skill in the database snapshot.");
+
+            const actor = snapshot.database.actors[0];
+            const weapon = snapshot.database.weapons.find(entry => String(entry.name || "").trim()) || snapshot.database.weapons[0];
+            const skill = snapshot.database.skills.find(entry => String(entry.name || "").trim()) || snapshot.database.skills[0];
+
+            await postJson("http://127.0.0.1:43115/project/database/save", {
+                projectDir: context.projectDir,
+                category: "actor",
+                mode: "update",
+                entry: {
+                    id: actor.id,
+                    name: actor.name,
+                    nickname: actor.nickname,
+                    profile: actor.profile,
+                    classId: actor.classId,
+                    initialLevel: actor.initialLevel,
+                    maxLevel: actor.maxLevel,
+                    faceName: actor.faceName,
+                    faceIndex: actor.faceIndex,
+                    characterName: actor.characterName,
+                    characterIndex: actor.characterIndex,
+                    battlerName: actor.battlerName,
+                    note: actor.note,
+                    backstory: "BDD smoke actor backstory",
+                    personality: "Careful and determined",
+                    relationshipNotes: "Keeps a journal of important bonds",
+                    intimateHistory: "Reserved but not inexperienced"
+                }
+            });
+
+            await postJson("http://127.0.0.1:43115/project/database/save", {
+                projectDir: context.projectDir,
+                category: "weapon",
+                mode: "update",
+                entry: {
+                    id: weapon.id,
+                    name: weapon.name,
+                    description: weapon.description,
+                    price: 4321,
+                    iconIndex: weapon.iconIndex,
+                    etypeId: weapon.etypeId,
+                    typeId: weapon.typeId,
+                    animationId: weapon.animationId,
+                    note: weapon.note,
+                    params: [0, 0, 42, 0, 0, 0, 0, 0]
+                }
+            });
+
+            await postJson("http://127.0.0.1:43115/project/database/save", {
+                projectDir: context.projectDir,
+                category: "skill",
+                mode: "update",
+                entry: {
+                    id: skill.id,
+                    name: skill.name,
+                    description: skill.description,
+                    iconIndex: skill.iconIndex,
+                    stypeId: skill.stypeId,
+                    animationId: skill.animationId,
+                    mpCost: 19,
+                    tpCost: skill.tpCost,
+                    occasion: skill.occasion,
+                    scope: skill.scope,
+                    speed: skill.speed,
+                    repeats: skill.repeats,
+                    successRate: skill.successRate,
+                    hitType: skill.hitType,
+                    note: skill.note,
+                    damage: {
+                        type: skill.damage.type,
+                        elementId: skill.damage.elementId,
+                        formula: "a.mat * 3 - b.mdf",
+                        variance: skill.damage.variance,
+                        critical: skill.damage.critical
+                    }
+                }
+            });
+
+            const actors = readJson(path.join(context.projectDir, "data", "Actors.json"));
+            const actorRecord = actors.find(entry => entry && Number(entry.id) === Number(actor.id));
+            assert.match(actorRecord.note, /<AiBackstory:BDD smoke actor backstory>/);
+            assert.match(actorRecord.note, /<AiIntimateHistory:Reserved but not inexperienced>/);
+
+            const weapons = readJson(path.join(context.projectDir, "data", "Weapons.json"));
+            const weaponRecord = weapons.find(entry => entry && Number(entry.id) === Number(weapon.id));
+            assert.equal(weaponRecord.price, 4321);
+            assert.equal(weaponRecord.params[2], 42);
+
+            const skills = readJson(path.join(context.projectDir, "data", "Skills.json"));
+            const skillRecord = skills.find(entry => entry && Number(entry.id) === Number(skill.id));
+            assert.equal(skillRecord.mpCost, 19);
+            assert.equal(skillRecord.damage.formula, "a.mat * 3 - b.mdf");
+        }
+    },
+    {
+        title: "Applying an event template creates a conditioned map event",
+        run: async context => {
+            const pictureAsset = context.assetLibrary.assets.find(asset => asset.folder === "pictures");
+            assert.ok(pictureAsset, "Expected a picture asset for the event template test.");
+
+            const result = await postJson("http://127.0.0.1:43115/project/event-template/apply", {
+                projectDir: context.projectDir,
+                template: {
+                    name: "BDD Ballroom CG",
+                    templateType: "showPicture",
+                    mapId: Number(context.rootMap.id),
+                    x: 8,
+                    y: 8,
+                    trigger: 0,
+                    priorityType: 1,
+                    summary: "Smoke test event template",
+                    conditions: {
+                        switchId: 3,
+                        switchState: "on",
+                        variableId: 0,
+                        variableOp: ">=",
+                        variableValue: 0
+                    },
+                    config: {
+                        message: "The ballroom scene begins.",
+                        picturePath: pictureAsset.projectPath,
+                        pictureId: 1,
+                        screenX: 408,
+                        screenY: 312
+                    }
+                }
+            });
+
+            const eventInfo = result.event;
+            const mapData = readJson(mapFilePath(context.projectDir, eventInfo.mapId));
+            const event = mapData.events[eventInfo.id];
+            assert.ok(event, "Expected the applied event template to create an event.");
+            assert.ok(Array.isArray(event.pages) && event.pages[0], "Expected the new event to have a page.");
+            assert.ok(event.pages[0].list.some(command => command.code === 231), "Expected the event page to contain a picture command.");
+            assert.equal(event.pages[0].conditions.switch1Valid, true);
+            assert.equal(Number(event.pages[0].conditions.switch1Id), 3);
+        }
     }
 ];
 

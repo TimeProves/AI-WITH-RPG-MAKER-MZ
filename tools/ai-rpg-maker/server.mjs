@@ -76,6 +76,13 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        if (req.method === "GET" && pathname === "/project/asset-file") {
+            const projectDir = String(requestUrl.searchParams.get("projectDir") || "").trim();
+            const projectPath = String(requestUrl.searchParams.get("projectPath") || "").trim();
+            await handleProjectAssetFile(res, projectDir, projectPath);
+            return;
+        }
+
         if (req.method === "POST" && pathname === "/pipeline/backups") {
             const body = await readJson(req);
             sendJson(res, 200, await handlePipelineBackups(body));
@@ -109,6 +116,36 @@ const server = http.createServer(async (req, res) => {
         if (req.method === "POST" && pathname === "/project/asset/save") {
             const body = await readJson(req);
             sendJson(res, 200, await handleProjectAssetSave(body));
+            return;
+        }
+
+        if (req.method === "POST" && pathname === "/project/database") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectDatabase(body));
+            return;
+        }
+
+        if (req.method === "POST" && pathname === "/project/database/save") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectDatabaseSave(body));
+            return;
+        }
+
+        if (req.method === "POST" && pathname === "/project/database/generate") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectDatabaseGenerate(body, config));
+            return;
+        }
+
+        if (req.method === "POST" && pathname === "/project/event-template/generate") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectEventTemplateGenerate(body, config));
+            return;
+        }
+
+        if (req.method === "POST" && pathname === "/project/event-template/apply") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectEventTemplateApply(body));
             return;
         }
 
@@ -646,6 +683,171 @@ async function handleProjectAssetSave(body) {
     };
 }
 
+async function handleProjectAssetFile(res, projectDir, projectPathValue) {
+    if (!projectDir || !projectPathValue) {
+        sendJson(res, 400, { error: "Missing projectDir or projectPath." });
+        return;
+    }
+
+    assertProjectShape(projectDir);
+    const normalized = String(projectPathValue).replace(/\\/g, "/").replace(/^\/+/, "");
+    if (normalized.includes("..")) {
+        sendJson(res, 400, { error: "Invalid projectPath." });
+        return;
+    }
+
+    const absolutePath = path.join(projectDir, normalized.replace(/\//g, path.sep));
+    if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
+        sendJson(res, 404, { error: "Asset file not found." });
+        return;
+    }
+
+    const buffer = fs.readFileSync(absolutePath);
+    res.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-store",
+        "Content-Type": contentTypeForFile(absolutePath)
+    });
+    res.end(buffer);
+}
+
+async function handleProjectDatabase(body) {
+    const projectDir = String(body?.projectDir || "").trim();
+    if (!projectDir) {
+        throw new Error("Missing projectDir.");
+    }
+
+    return {
+        ok: true,
+        database: buildProjectDatabaseSnapshot(projectDir)
+    };
+}
+
+async function handleProjectDatabaseSave(body) {
+    const projectDir = String(body?.projectDir || "").trim();
+    const category = String(body?.category || "").trim();
+    const entry = body?.entry || {};
+    const mode = String(body?.mode || "update").trim();
+    if (!projectDir) {
+        throw new Error("Missing projectDir.");
+    }
+    if (!category) {
+        throw new Error("Missing category.");
+    }
+
+    const result = saveProjectDatabaseEntry(projectDir, category, entry, mode);
+    return {
+        ok: true,
+        saved: result,
+        database: buildProjectDatabaseSnapshot(projectDir),
+        overview: buildProjectOverview(projectDir),
+        assets: buildProjectAssetLibrary(projectDir)
+    };
+}
+
+async function handleProjectDatabaseGenerate(body, runtimeConfig) {
+    const category = String(body?.category || "").trim().toLowerCase();
+    const prompt = String(body?.prompt || "").trim();
+    if (!category) {
+        throw new Error("Missing category.");
+    }
+    if (!prompt) {
+        throw new Error("Missing prompt.");
+    }
+
+    const schema = buildDatabaseDraftSchema(category);
+    const systemPrompt = [
+        "You generate JSON draft records for an RPG Maker MZ database editor.",
+        "Return JSON only.",
+        `Category: ${category}`,
+        "Do not include markdown fences.",
+        `Use this schema:\n${schema}`
+    ].join("\n\n");
+
+    const userPrompt = [
+        `Designer request:\n${prompt}`,
+        "Return a practical draft that can be edited and saved into the RPG Maker project."
+    ].join("\n\n");
+
+    const text = await callProvider(runtimeConfig.provider, systemPrompt, userPrompt);
+    return {
+        ok: true,
+        category,
+        draft: parseJsonObject(text),
+        raw: text
+    };
+}
+
+async function handleProjectEventTemplateGenerate(body, runtimeConfig) {
+    const prompt = String(body?.prompt || "").trim();
+    if (!prompt) {
+        throw new Error("Missing prompt.");
+    }
+
+    const systemPrompt = [
+        "You generate constrained event-template JSON for RPG Maker MZ.",
+        "Return JSON only.",
+        "Allowed templateType values: showPicture, transfer, commonEvent, treasure, switchControl.",
+        "Use this schema:",
+        '{',
+        '  "name": "string",',
+        '  "templateType": "showPicture",',
+        '  "mapId": 1,',
+        '  "x": 10,',
+        '  "y": 10,',
+        '  "trigger": 0,',
+        '  "priorityType": 1,',
+        '  "conditions": {',
+        '    "switchId": 0,',
+        '    "switchState": "on",',
+        '    "variableId": 0,',
+        '    "variableOp": ">=",',
+        '    "variableValue": 0',
+        "  },",
+        '  "config": {',
+        '    "message": "string",',
+        '    "picturePath": "img/pictures/example.png",',
+        '    "targetMapId": 1,',
+        '    "targetX": 5,',
+        '    "targetY": 5,',
+        '    "commonEventId": 1,',
+        '    "itemId": 1,',
+        '    "amount": 1,',
+        '    "switchId": 1,',
+        '    "switchValue": true',
+        "  },",
+        '  "summary": "string"',
+        '}',
+        "Only include keys that are useful for the chosen templateType."
+    ].join("\n");
+
+    const userPrompt = [
+        `Designer request:\n${prompt}`,
+        "Return a concise event template JSON draft."
+    ].join("\n\n");
+
+    const text = await callProvider(runtimeConfig.provider, systemPrompt, userPrompt);
+    return {
+        ok: true,
+        template: normalizeEventTemplate(parseJsonObject(text)),
+        raw: text
+    };
+}
+
+async function handleProjectEventTemplateApply(body) {
+    const projectDir = String(body?.projectDir || "").trim();
+    const template = body?.template || {};
+    if (!projectDir) {
+        throw new Error("Missing projectDir.");
+    }
+    const result = applyEventTemplate(projectDir, template);
+    return {
+        ok: true,
+        event: result,
+        overview: buildProjectOverview(projectDir)
+    };
+}
+
 function buildProjectOverview(projectDir) {
     assertProjectShape(projectDir);
     const dataDir = path.join(projectDir, "data");
@@ -695,6 +897,10 @@ function buildProjectOverview(projectDir) {
     const tree = buildMapTree(mapRecords);
     const actors = readJsonFile(path.join(dataDir, "Actors.json"), []).filter(Boolean);
     const items = readJsonFile(path.join(dataDir, "Items.json"), []).filter(Boolean);
+    const weapons = readJsonFile(path.join(dataDir, "Weapons.json"), []).filter(Boolean);
+    const armors = readJsonFile(path.join(dataDir, "Armors.json"), []).filter(Boolean);
+    const skills = readJsonFile(path.join(dataDir, "Skills.json"), []).filter(Boolean);
+    const commonEvents = readJsonFile(path.join(dataDir, "CommonEvents.json"), []).filter(Boolean);
     return {
         projectDir,
         worldContext: String(profileStore.worldContext || ""),
@@ -703,7 +909,11 @@ function buildProjectOverview(projectDir) {
             npcCount: npcRecords.length,
             profileCount: profiles.length,
             actorCount: actors.length,
-            itemCount: items.length
+            itemCount: items.length,
+            weaponCount: weapons.length,
+            armorCount: armors.length,
+            skillCount: skills.length,
+            commonEventCount: commonEvents.length
         },
         tree,
         maps: mapRecords
@@ -729,6 +939,25 @@ function buildProjectOverview(projectDir) {
             id: item.id,
             name: item.name || `Item ${item.id}`,
             note: item.note || ""
+        })),
+        weapons: weapons.map(entry => ({
+            id: entry.id,
+            name: entry.name || `Weapon ${entry.id}`,
+            note: entry.note || ""
+        })),
+        armors: armors.map(entry => ({
+            id: entry.id,
+            name: entry.name || `Armor ${entry.id}`,
+            note: entry.note || ""
+        })),
+        skills: skills.map(entry => ({
+            id: entry.id,
+            name: entry.name || `Skill ${entry.id}`,
+            note: entry.note || ""
+        })),
+        commonEvents: commonEvents.map(entry => ({
+            id: entry.id,
+            name: entry.name || `Common Event ${entry.id}`
         }))
     };
 }
@@ -873,7 +1102,10 @@ function buildProjectAssetLibrary(projectDir) {
         owners: {
             npcs: overview.npcs.map(npc => ({ id: npc.id, name: npc.name, label: npc.path })),
             actors: overview.actors.map(actor => ({ id: actor.id, name: actor.name })),
-            items: overview.items.map(item => ({ id: item.id, name: item.name }))
+            items: overview.items.map(item => ({ id: item.id, name: item.name })),
+            weapons: overview.weapons.map(entry => ({ id: entry.id, name: entry.name })),
+            armors: overview.armors.map(entry => ({ id: entry.id, name: entry.name })),
+            skills: overview.skills.map(entry => ({ id: entry.id, name: entry.name }))
         }
     };
 }
@@ -1482,6 +1714,15 @@ function applyAssetBindingToProject(projectDir, binding, store) {
         case "item":
             applyBindingToItem(projectDir, binding);
             break;
+        case "weapon":
+            applyBindingToDatabaseNote(projectDir, "Weapons.json", binding, "Weapon");
+            break;
+        case "armor":
+            applyBindingToDatabaseNote(projectDir, "Armors.json", binding, "Armor");
+            break;
+        case "skill":
+            applyBindingToDatabaseNote(projectDir, "Skills.json", binding, "Skill");
+            break;
         default:
             throw new Error(`Unsupported ownerType: ${binding.ownerType}`);
     }
@@ -1569,10 +1810,26 @@ function applyBindingToItem(projectDir, binding) {
     writeJsonFile(itemsPath, items);
 }
 
+function applyBindingToDatabaseNote(projectDir, fileName, binding, label) {
+    const filePath = path.join(projectDir, "data", fileName);
+    const entries = readJsonFile(filePath, []);
+    const id = Number(binding.ownerId);
+    const entry = entries.find(record => record && Number(record.id) === id);
+    if (!entry) {
+        throw new Error(`${label} ${binding.ownerId} was not found.`);
+    }
+    entry.note = replaceTaggedNote(entry.note || "", "AiAssetPicture", binding.projectPath);
+    writeJsonFile(filePath, entries);
+}
+
 function replaceTaggedNote(note, tag, value) {
     const source = String(note || "");
     const cleaned = source.replace(new RegExp(`<${tag}:[^>]*>`, "gi"), "").trim();
-    return `${cleaned}${cleaned ? "\n" : ""}<${tag}:${value}>`;
+    const normalizedValue = String(value || "").trim();
+    if (!normalizedValue) {
+        return cleaned;
+    }
+    return `${cleaned}${cleaned ? "\n" : ""}<${tag}:${normalizedValue}>`;
 }
 
 function findNpcEventLocation(projectDir, npcId) {
@@ -1585,6 +1842,712 @@ function findNpcEventLocation(projectDir, npcId) {
         mapId: npc.mapId,
         eventId: npc.eventId
     };
+}
+
+function buildProjectDatabaseSnapshot(projectDir) {
+    assertProjectShape(projectDir);
+    const dataDir = path.join(projectDir, "data");
+    const overview = buildProjectOverview(projectDir);
+    const actors = readJsonFile(path.join(dataDir, "Actors.json"), []).filter(Boolean);
+    const items = readJsonFile(path.join(dataDir, "Items.json"), []).filter(Boolean);
+    const weapons = readJsonFile(path.join(dataDir, "Weapons.json"), []).filter(Boolean);
+    const armors = readJsonFile(path.join(dataDir, "Armors.json"), []).filter(Boolean);
+    const skills = readJsonFile(path.join(dataDir, "Skills.json"), []).filter(Boolean);
+    const commonEvents = readJsonFile(path.join(dataDir, "CommonEvents.json"), []).filter(Boolean);
+
+    return {
+        projectDir,
+        summary: {
+            actors: actors.length,
+            items: items.length,
+            weapons: weapons.length,
+            armors: armors.length,
+            skills: skills.length,
+            commonEvents: commonEvents.length
+        },
+        maps: overview.maps,
+        actors: actors.map(entry => serializeActorRecord(entry)),
+        items: items.map(entry => serializeItemRecord(entry)),
+        weapons: weapons.map(entry => serializeEquipRecord(entry, "weapon")),
+        armors: armors.map(entry => serializeEquipRecord(entry, "armor")),
+        skills: skills.map(entry => serializeSkillRecord(entry)),
+        commonEvents: commonEvents.map(entry => ({
+            id: Number(entry.id || 0),
+            name: String(entry.name || `Common Event ${entry.id}`),
+            trigger: Number(entry.trigger || 0),
+            listLength: Array.isArray(entry.list) ? entry.list.length : 0
+        }))
+    };
+}
+
+function saveProjectDatabaseEntry(projectDir, category, entry, mode) {
+    assertProjectShape(projectDir);
+    const normalizedCategory = String(category || "").trim().toLowerCase();
+    const dataDir = path.join(projectDir, "data");
+    const fileNameByCategory = {
+        actor: "Actors.json",
+        item: "Items.json",
+        weapon: "Weapons.json",
+        armor: "Armors.json",
+        skill: "Skills.json"
+    };
+    const fileName = fileNameByCategory[normalizedCategory];
+    if (!fileName) {
+        throw new Error(`Unsupported database category: ${category}`);
+    }
+
+    const filePath = path.join(dataDir, fileName);
+    const source = readJsonFile(filePath, []);
+    const shouldCreate = String(mode || "").toLowerCase() === "create" || !Number(entry?.id || 0);
+    const targetId = shouldCreate ? nextDatabaseId(source) : Number(entry.id);
+    let target = source.find(record => record && Number(record.id) === targetId);
+    if (!target) {
+        target = createDatabaseRecord(normalizedCategory, targetId);
+        source[targetId] = target;
+    }
+
+    switch (normalizedCategory) {
+        case "actor":
+            applyActorRecord(target, entry);
+            break;
+        case "item":
+            applyItemRecord(target, entry);
+            break;
+        case "weapon":
+        case "armor":
+            applyEquipRecord(target, entry, normalizedCategory);
+            break;
+        case "skill":
+            applySkillRecord(target, entry);
+            break;
+        default:
+            break;
+    }
+
+    writeJsonFile(filePath, source);
+    return {
+        category: normalizedCategory,
+        id: targetId,
+        name: String(target.name || `${normalizedCategory} ${targetId}`)
+    };
+}
+
+function buildDatabaseDraftSchema(category) {
+    switch (String(category || "").trim().toLowerCase()) {
+        case "actor":
+            return JSON.stringify({
+                name: "string",
+                nickname: "string",
+                profile: "string",
+                classId: 1,
+                initialLevel: 1,
+                maxLevel: 99,
+                faceName: "Actor1",
+                faceIndex: 0,
+                characterName: "Actor1",
+                characterIndex: 0,
+                battlerName: "Actor1_1",
+                backstory: "string",
+                personality: "string",
+                relationshipNotes: "string",
+                intimateHistory: "string"
+            }, null, 2);
+        case "weapon":
+            return JSON.stringify({
+                name: "string",
+                description: "string",
+                price: 300,
+                iconIndex: 97,
+                wtypeId: 1,
+                animationId: 6,
+                etypeId: 1,
+                params: [0, 0, 8, 0, 0, 0, 0, 0],
+                note: "string"
+            }, null, 2);
+        case "armor":
+            return JSON.stringify({
+                name: "string",
+                description: "string",
+                price: 300,
+                iconIndex: 135,
+                atypeId: 1,
+                etypeId: 4,
+                params: [0, 0, 0, 8, 0, 0, 0, 0],
+                note: "string"
+            }, null, 2);
+        case "skill":
+            return JSON.stringify({
+                name: "string",
+                description: "string",
+                iconIndex: 64,
+                stypeId: 1,
+                animationId: 1,
+                mpCost: 10,
+                tpCost: 0,
+                occasion: 0,
+                scope: 1,
+                speed: 0,
+                repeats: 1,
+                successRate: 100,
+                hitType: 1,
+                damage: {
+                    type: 1,
+                    elementId: 0,
+                    formula: "a.mat * 2 - b.mdf",
+                    variance: 20,
+                    critical: false
+                },
+                note: "string"
+            }, null, 2);
+        case "item":
+        default:
+            return JSON.stringify({
+                name: "string",
+                description: "string",
+                price: 100,
+                iconIndex: 176,
+                itypeId: 1,
+                consumable: true,
+                occasion: 0,
+                scope: 7,
+                speed: 0,
+                successRate: 100,
+                note: "string"
+            }, null, 2);
+    }
+}
+
+function serializeActorRecord(entry) {
+    return {
+        id: Number(entry.id || 0),
+        name: String(entry.name || ""),
+        nickname: String(entry.nickname || ""),
+        profile: String(entry.profile || ""),
+        classId: Number(entry.classId || 1),
+        initialLevel: Number(entry.initialLevel || 1),
+        maxLevel: Number(entry.maxLevel || 99),
+        faceName: String(entry.faceName || ""),
+        faceIndex: Number(entry.faceIndex || 0),
+        characterName: String(entry.characterName || ""),
+        characterIndex: Number(entry.characterIndex || 0),
+        battlerName: String(entry.battlerName || ""),
+        note: String(entry.note || ""),
+        assetPicture: getTaggedNoteValue(entry.note, "AiAssetPicture"),
+        backstory: getTaggedNoteValue(entry.note, "AiBackstory"),
+        personality: getTaggedNoteValue(entry.note, "AiPersonality"),
+        relationshipNotes: getTaggedNoteValue(entry.note, "AiRelationshipNotes"),
+        intimateHistory: getTaggedNoteValue(entry.note, "AiIntimateHistory")
+    };
+}
+
+function serializeItemRecord(entry) {
+    return {
+        id: Number(entry.id || 0),
+        name: String(entry.name || ""),
+        description: String(entry.description || ""),
+        price: Number(entry.price || 0),
+        iconIndex: Number(entry.iconIndex || 0),
+        itypeId: Number(entry.itypeId || 1),
+        consumable: Boolean(entry.consumable),
+        occasion: Number(entry.occasion || 0),
+        scope: Number(entry.scope || 0),
+        speed: Number(entry.speed || 0),
+        successRate: Number(entry.successRate || 100),
+        note: String(entry.note || ""),
+        assetPicture: getTaggedNoteValue(entry.note, "AiAssetPicture")
+    };
+}
+
+function serializeEquipRecord(entry, kind) {
+    return {
+        id: Number(entry.id || 0),
+        kind,
+        name: String(entry.name || ""),
+        description: String(entry.description || ""),
+        price: Number(entry.price || 0),
+        iconIndex: Number(entry.iconIndex || 0),
+        etypeId: Number(entry.etypeId || 1),
+        typeId: Number(kind === "weapon" ? entry.wtypeId || 0 : entry.atypeId || 0),
+        animationId: Number(entry.animationId || 0),
+        params: normalizeParams(entry.params),
+        note: String(entry.note || ""),
+        assetPicture: getTaggedNoteValue(entry.note, "AiAssetPicture")
+    };
+}
+
+function serializeSkillRecord(entry) {
+    return {
+        id: Number(entry.id || 0),
+        name: String(entry.name || ""),
+        description: String(entry.description || ""),
+        iconIndex: Number(entry.iconIndex || 0),
+        stypeId: Number(entry.stypeId || 1),
+        animationId: Number(entry.animationId || 0),
+        mpCost: Number(entry.mpCost || 0),
+        tpCost: Number(entry.tpCost || 0),
+        occasion: Number(entry.occasion || 0),
+        scope: Number(entry.scope || 0),
+        speed: Number(entry.speed || 0),
+        repeats: Number(entry.repeats || 1),
+        successRate: Number(entry.successRate || 100),
+        hitType: Number(entry.hitType || 0),
+        note: String(entry.note || ""),
+        assetPicture: getTaggedNoteValue(entry.note, "AiAssetPicture"),
+        damage: {
+            type: Number(entry.damage?.type || 0),
+            elementId: Number(entry.damage?.elementId || 0),
+            formula: String(entry.damage?.formula || "0"),
+            variance: Number(entry.damage?.variance || 20),
+            critical: Boolean(entry.damage?.critical)
+        }
+    };
+}
+
+function createDatabaseRecord(category, id) {
+    switch (category) {
+        case "actor":
+            return {
+                id,
+                battlerName: "",
+                characterIndex: 0,
+                characterName: "",
+                classId: 1,
+                equips: [0, 0, 0, 0, 0],
+                faceIndex: 0,
+                faceName: "",
+                traits: [],
+                initialLevel: 1,
+                maxLevel: 99,
+                name: `New Actor ${id}`,
+                nickname: "",
+                note: "",
+                profile: ""
+            };
+        case "item":
+            return {
+                id,
+                animationId: 0,
+                consumable: true,
+                damage: { critical: false, elementId: 0, formula: "0", type: 0, variance: 20 },
+                description: "",
+                effects: [],
+                hitType: 0,
+                iconIndex: 0,
+                occasion: 0,
+                itypeId: 1,
+                name: `New Item ${id}`,
+                note: "",
+                repeats: 1,
+                scope: 7,
+                speed: 0,
+                successRate: 100,
+                tpGain: 0,
+                price: 0
+            };
+        case "weapon":
+            return {
+                id,
+                animationId: 1,
+                description: "",
+                etypeId: 1,
+                traits: [],
+                iconIndex: 0,
+                name: `New Weapon ${id}`,
+                note: "",
+                params: [0, 0, 0, 0, 0, 0, 0, 0],
+                price: 0,
+                wtypeId: 1
+            };
+        case "armor":
+            return {
+                id,
+                atypeId: 1,
+                description: "",
+                etypeId: 4,
+                traits: [],
+                iconIndex: 0,
+                name: `New Armor ${id}`,
+                note: "",
+                params: [0, 0, 0, 0, 0, 0, 0, 0],
+                price: 0
+            };
+        case "skill":
+            return {
+                id,
+                animationId: 0,
+                damage: { critical: false, elementId: 0, formula: "0", type: 0, variance: 20 },
+                description: "",
+                effects: [],
+                hitType: 0,
+                iconIndex: 0,
+                message1: "%1 uses %2!",
+                message2: "",
+                mpCost: 0,
+                name: `New Skill ${id}`,
+                note: "",
+                occasion: 0,
+                repeats: 1,
+                requiredWtypeId1: 0,
+                requiredWtypeId2: 0,
+                scope: 1,
+                speed: 0,
+                stypeId: 1,
+                successRate: 100,
+                tpCost: 0,
+                tpGain: 0,
+                messageType: 1
+            };
+        default:
+            throw new Error(`Unsupported database category: ${category}`);
+    }
+}
+
+function applyActorRecord(target, source) {
+    target.name = String(source?.name || target.name || "");
+    target.nickname = String(source?.nickname || "");
+    target.profile = String(source?.profile || "");
+    target.classId = Number(source?.classId || target.classId || 1);
+    target.initialLevel = Number(source?.initialLevel || target.initialLevel || 1);
+    target.maxLevel = Number(source?.maxLevel || target.maxLevel || 99);
+    target.faceName = String(source?.faceName || "");
+    target.faceIndex = Number(source?.faceIndex || 0);
+    target.characterName = String(source?.characterName || "");
+    target.characterIndex = Number(source?.characterIndex || 0);
+    target.battlerName = String(source?.battlerName || "");
+    let note = String(source?.note ?? target.note ?? "");
+    note = replaceTaggedNote(note, "AiBackstory", String(source?.backstory || ""));
+    note = replaceTaggedNote(note, "AiPersonality", String(source?.personality || ""));
+    note = replaceTaggedNote(note, "AiRelationshipNotes", String(source?.relationshipNotes || ""));
+    note = replaceTaggedNote(note, "AiIntimateHistory", String(source?.intimateHistory || ""));
+    target.note = cleanupTaggedNote(note);
+}
+
+function applyItemRecord(target, source) {
+    target.name = String(source?.name || target.name || "");
+    target.description = String(source?.description || "");
+    target.price = Number(source?.price || 0);
+    target.iconIndex = Number(source?.iconIndex || 0);
+    target.itypeId = Number(source?.itypeId || target.itypeId || 1);
+    target.consumable = Boolean(source?.consumable);
+    target.occasion = Number(source?.occasion || 0);
+    target.scope = Number(source?.scope || 0);
+    target.speed = Number(source?.speed || 0);
+    target.successRate = Number(source?.successRate || 100);
+    target.note = String(source?.note ?? target.note ?? "");
+}
+
+function applyEquipRecord(target, source, category) {
+    target.name = String(source?.name || target.name || "");
+    target.description = String(source?.description || "");
+    target.price = Number(source?.price || 0);
+    target.iconIndex = Number(source?.iconIndex || 0);
+    target.etypeId = Number(source?.etypeId || target.etypeId || (category === "weapon" ? 1 : 4));
+    if (category === "weapon") {
+        target.wtypeId = Number(source?.typeId || source?.wtypeId || target.wtypeId || 1);
+        target.animationId = Number(source?.animationId || target.animationId || 1);
+    } else {
+        target.atypeId = Number(source?.typeId || source?.atypeId || target.atypeId || 1);
+    }
+    target.params = normalizeParams(source?.params);
+    target.note = String(source?.note ?? target.note ?? "");
+}
+
+function applySkillRecord(target, source) {
+    target.name = String(source?.name || target.name || "");
+    target.description = String(source?.description || "");
+    target.iconIndex = Number(source?.iconIndex || 0);
+    target.stypeId = Number(source?.stypeId || target.stypeId || 1);
+    target.animationId = Number(source?.animationId || 0);
+    target.mpCost = Number(source?.mpCost || 0);
+    target.tpCost = Number(source?.tpCost || 0);
+    target.occasion = Number(source?.occasion || 0);
+    target.scope = Number(source?.scope || 1);
+    target.speed = Number(source?.speed || 0);
+    target.repeats = Number(source?.repeats || 1);
+    target.successRate = Number(source?.successRate || 100);
+    target.hitType = Number(source?.hitType || 0);
+    target.note = String(source?.note ?? target.note ?? "");
+    if (!target.damage || typeof target.damage !== "object") {
+        target.damage = { critical: false, elementId: 0, formula: "0", type: 0, variance: 20 };
+    }
+    target.damage.type = Number(source?.damage?.type || 0);
+    target.damage.elementId = Number(source?.damage?.elementId || 0);
+    target.damage.formula = String(source?.damage?.formula || "0");
+    target.damage.variance = Number(source?.damage?.variance || 20);
+    target.damage.critical = Boolean(source?.damage?.critical);
+}
+
+function normalizeParams(value) {
+    if (!Array.isArray(value)) {
+        return [0, 0, 0, 0, 0, 0, 0, 0];
+    }
+    const params = value.slice(0, 8).map(entry => Number(entry || 0));
+    while (params.length < 8) {
+        params.push(0);
+    }
+    return params;
+}
+
+function nextDatabaseId(entries) {
+    let id = 1;
+    while (entries[id]) {
+        id += 1;
+    }
+    return id;
+}
+
+function getTaggedNoteValue(note, tag) {
+    const match = String(note || "").match(new RegExp(`<${tag}:([\\s\\S]*?)>`, "i"));
+    return match ? String(match[1] || "").trim() : "";
+}
+
+function cleanupTaggedNote(note) {
+    return String(note || "")
+        .split("\n")
+        .map(line => line.trimEnd())
+        .filter((line, index, lines) => line || (index > 0 && index < lines.length - 1))
+        .join("\n")
+        .trim();
+}
+
+function normalizeEventTemplate(input) {
+    const template = input && typeof input === "object" ? input : {};
+    return {
+        name: String(template.name || "AI Event").trim() || "AI Event",
+        templateType: normalizeEventTemplateType(template.templateType),
+        mapId: Number(template.mapId || 1),
+        x: Number(template.x || 1),
+        y: Number(template.y || 1),
+        trigger: Number(template.trigger || 0),
+        priorityType: Number(template.priorityType ?? 1),
+        conditions: {
+            switchId: Number(template.conditions?.switchId || 0),
+            switchState: String(template.conditions?.switchState || "on").toLowerCase() === "off" ? "off" : "on",
+            variableId: Number(template.conditions?.variableId || 0),
+            variableOp: [">=", "==", "<=", ">", "<"].includes(String(template.conditions?.variableOp || "")) ? String(template.conditions.variableOp) : ">=",
+            variableValue: Number(template.conditions?.variableValue || 0)
+        },
+        config: template.config && typeof template.config === "object" ? template.config : {},
+        summary: String(template.summary || "")
+    };
+}
+
+function normalizeEventTemplateType(value) {
+    const normalized = String(value || "").trim();
+    if (["showPicture", "transfer", "commonEvent", "treasure", "switchControl"].includes(normalized)) {
+        return normalized;
+    }
+    return "showPicture";
+}
+
+function applyEventTemplate(projectDir, input) {
+    assertProjectShape(projectDir);
+    const template = normalizeEventTemplate(input);
+    const mapPath = mapFilePath(projectDir, template.mapId);
+    const mapData = readJsonFile(mapPath, null);
+    if (!mapData?.events) {
+        throw new Error(`Map ${template.mapId} could not be loaded.`);
+    }
+
+    const eventId = nextOpenEventId(mapData.events);
+    const event = {
+        id: eventId,
+        name: template.name,
+        note: "",
+        pages: [
+            {
+                conditions: buildEventConditions(template.conditions),
+                directionFix: false,
+                image: {
+                    tileId: 0,
+                    characterName: "",
+                    direction: 2,
+                    pattern: 1,
+                    characterIndex: 0
+                },
+                list: buildEventCommandList(template),
+                moveFrequency: 3,
+                moveRoute: defaultMoveRoute(),
+                moveSpeed: 3,
+                moveType: 0,
+                priorityType: Number(template.priorityType || 1),
+                stepAnime: false,
+                through: false,
+                trigger: Number(template.trigger || 0),
+                walkAnime: true
+            }
+        ],
+        x: clampCoordinate(template.x, mapData.width),
+        y: clampCoordinate(template.y, mapData.height)
+    };
+    mapData.events[eventId] = event;
+    writeJsonFile(mapPath, mapData);
+    return {
+        id: eventId,
+        mapId: template.mapId,
+        name: template.name,
+        templateType: template.templateType
+    };
+}
+
+function buildEventConditions(input) {
+    const conditions = defaultEventConditions();
+    if (Number(input?.switchId || 0) > 0) {
+        conditions.switch1Valid = true;
+        conditions.switch1Id = Number(input.switchId);
+    }
+    if (Number(input?.variableId || 0) > 0) {
+        conditions.variableValid = true;
+        conditions.variableId = Number(input.variableId);
+        conditions.variableValue = Number(input.variableValue || 0);
+    }
+    return conditions;
+}
+
+function buildEventCommandList(template) {
+    const commands = [];
+    if (template.summary) {
+        commands.push(commentCommand(template.summary));
+    }
+
+    const config = template.config || {};
+    switch (template.templateType) {
+        case "transfer":
+            commands.push({
+                code: 201,
+                indent: 0,
+                parameters: [
+                    0,
+                    Number(config.targetMapId || 1),
+                    Number(config.targetX || 1),
+                    Number(config.targetY || 1),
+                    Number(config.direction || 2),
+                    Number(config.fadeType || 0)
+                ]
+            });
+            break;
+        case "commonEvent":
+            commands.push({
+                code: 117,
+                indent: 0,
+                parameters: [Number(config.commonEventId || 1)]
+            });
+            break;
+        case "treasure":
+            if (config.message) {
+                commands.push(...messageCommands(String(config.message)));
+            }
+            commands.push({
+                code: 126,
+                indent: 0,
+                parameters: [Number(config.itemId || 1), 0, 0, Math.max(1, Number(config.amount || 1))]
+            });
+            break;
+        case "switchControl":
+            if (config.message) {
+                commands.push(...messageCommands(String(config.message)));
+            }
+            commands.push({
+                code: 121,
+                indent: 0,
+                parameters: [Number(config.switchId || 1), Number(config.switchId || 1), config.switchValue === false ? 1 : 0]
+            });
+            break;
+        case "showPicture":
+        default: {
+            const pictureName = path.parse(String(config.picturePath || config.pictureName || "")).name;
+            if (config.message) {
+                commands.push(...messageCommands(String(config.message)));
+            }
+            commands.push({
+                code: 231,
+                indent: 0,
+                parameters: [
+                    Number(config.pictureId || 1),
+                    pictureName,
+                    Number(config.origin || 0),
+                    Number(config.screenX || 408),
+                    Number(config.screenY || 312),
+                    Number(config.scaleX || 100),
+                    Number(config.scaleY || 100),
+                    Number(config.opacity || 255),
+                    Number(config.blendMode || 0)
+                ]
+            });
+            break;
+        }
+    }
+
+    commands.push({
+        code: 0,
+        indent: 0,
+        parameters: []
+    });
+    return commands;
+}
+
+function defaultEventConditions() {
+    return {
+        actorId: 1,
+        actorValid: false,
+        itemId: 1,
+        itemValid: false,
+        selfSwitchCh: "A",
+        selfSwitchValid: false,
+        switch1Id: 1,
+        switch1Valid: false,
+        switch2Id: 1,
+        switch2Valid: false,
+        variableId: 1,
+        variableValid: false,
+        variableValue: 0
+    };
+}
+
+function defaultMoveRoute() {
+    return {
+        list: [{ code: 0, parameters: [] }],
+        repeat: true,
+        skippable: false,
+        wait: false
+    };
+}
+
+function commentCommand(text) {
+    return {
+        code: 108,
+        indent: 0,
+        parameters: [String(text || "")]
+    };
+}
+
+function messageCommands(text) {
+    return [
+        {
+            code: 101,
+            indent: 0,
+            parameters: ["", 0, 0, 2, ""]
+        },
+        {
+            code: 401,
+            indent: 0,
+            parameters: [String(text || "")]
+        }
+    ];
+}
+
+function contentTypeForFile(filePath) {
+    switch (path.extname(String(filePath || "")).toLowerCase()) {
+        case ".png":
+            return "image/png";
+        case ".jpg":
+        case ".jpeg":
+            return "image/jpeg";
+        case ".webp":
+            return "image/webp";
+        default:
+            return "application/octet-stream";
+    }
 }
 
 function inferParentMapId(mapData, currentMapId, knownMapIds) {

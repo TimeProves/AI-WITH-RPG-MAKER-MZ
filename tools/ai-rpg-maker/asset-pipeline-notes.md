@@ -15,6 +15,7 @@ The local asset library scans the project `img/` folders and builds an index for
 Current goals:
 
 - browse existing project art from the workbench
+- preview the selected asset inside the workbench
 - reuse a local project asset without copying it
 - import an external local file into the correct RPG Maker asset folder
 - track which asset is bound to which owner
@@ -49,6 +50,9 @@ Supported owner types:
 - `npc`
 - `actor`
 - `item`
+- `weapon`
+- `armor`
+- `skill`
 
 Supported asset kinds:
 
@@ -70,6 +74,26 @@ Current behavior:
   - `character` bindings also update the matching map event image
   - portrait and picture bindings are stored for future UI/runtime use
 - item bindings update `Items.json` note tags and are tracked in `AiAssetBindings.json`
+- weapon, armor, and skill bindings update their database note tags and are tracked in `AiAssetBindings.json`
+
+## Scene Art And Event Templates
+
+The workbench now includes an Event Composer for reusable map-event patterns.
+
+Current supported template types:
+
+- `showPicture`
+- `transfer`
+- `commonEvent`
+- `treasure`
+- `switchControl`
+
+Current behavior:
+
+- a selected `img/pictures/*` asset can be reused in an event template
+- the template is applied as a real map event in `MapXXX.json`
+- switch and variable conditions are written into the first event page
+- this is meant for common event scaffolding, not for every advanced RPG Maker opcode yet
 
 ## Why A Separate Binding Layer Exists
 
@@ -86,7 +110,7 @@ The extra binding index is useful for:
 ## Next Logical Steps
 
 - connect a real image generation API
-- support binding previews in the workbench
 - expose bound portraits inside the AI NPC dialogue scene
 - add create/delete asset binding flows
 - add condition previews for stage-based portrait selection
+- support richer scene-art event flows such as multi-picture sequences and fade choreography
