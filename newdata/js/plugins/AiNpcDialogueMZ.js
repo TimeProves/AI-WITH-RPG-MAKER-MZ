@@ -174,15 +174,16 @@
         },
 
         startSession(config) {
-            this.session = this.buildSession(config);
+            const session = this.buildSession(config);
+            const persisted = this.loadPersistedSession(session.npcId);
+            session.history = normalizeHistory(persisted?.history);
+            this.session = session;
 
-            if (this.session.openingLine) {
-                this.session.history.push({
-                    role: "assistant",
-                    speaker: this.session.npcName,
-                    text: this.session.openingLine
-                });
+            if (!this.session.history.length && this.session.openingLine) {
+                this.pushMessage("assistant", this.session.npcName, this.session.openingLine);
             }
+
+            this.persistSession();
         },
 
         buildSession(config) {
@@ -202,6 +203,27 @@
                 trackedSwitchIds: Array.isArray(resolved.trackedSwitchIds) ? resolved.trackedSwitchIds : [],
                 trackedVariableIds: Array.isArray(resolved.trackedVariableIds) ? resolved.trackedVariableIds : [],
                 history: []
+            };
+        },
+
+        loadPersistedSession(npcId) {
+            const store = ensureSessionStore();
+            return store[String(npcId || "npc")] || null;
+        },
+
+        persistSession() {
+            if (!this.session) {
+                return;
+            }
+            const store = ensureSessionStore();
+            store[this.session.npcId] = {
+                history: this.session.history.map(entry => ({
+                    id: entry.id,
+                    role: entry.role,
+                    speaker: entry.speaker,
+                    text: entry.text,
+                    timestamp: entry.timestamp
+                }))
             };
         },
 
@@ -262,10 +284,85 @@
                 return;
             }
             this.session.history.push({
+                id: nextMessageId(this.session.history),
                 role,
                 speaker,
-                text
+                text,
+                timestamp: new Date().toISOString()
             });
+            this.persistSession();
+        },
+
+        getTimelineEntries() {
+            if (!this.session) {
+                return [];
+            }
+            const entries = [];
+            const history = this.session.history;
+            for (let index = 0; index < history.length; index += 1) {
+                const entry = history[index];
+                if (!entry) {
+                    continue;
+                }
+                if (entry.role === "user") {
+                    entries.push({
+                        id: `anchor-${entry.id}`,
+                        index,
+                        speaker: entry.speaker || param.playerDisplayName,
+                        label: shortenLabel(entry.text || "Player", 18),
+                        role: entry.role
+                    });
+                    continue;
+                }
+                if (entries.length === 0) {
+                    entries.push({
+                        id: `anchor-${entry.id}`,
+                        index,
+                        speaker: entry.speaker || this.session.npcName,
+                        label: shortenLabel(entry.text || "Opening", 18),
+                        role: "opening"
+                    });
+                }
+            }
+            return entries;
+        },
+
+        buildExportSnapshot() {
+            if (!this.session) {
+                return null;
+            }
+            return {
+                npcId: this.session.npcId,
+                npcName: this.session.npcName,
+                locationName: this.session.locationName,
+                exportedAt: new Date().toISOString(),
+                hint: $gameSystem._aiNpcLastHint || "",
+                history: this.session.history.map(entry => ({
+                    id: entry.id,
+                    role: entry.role,
+                    speaker: entry.speaker,
+                    text: entry.text,
+                    timestamp: entry.timestamp || ""
+                }))
+            };
+        },
+
+        exportSession(format) {
+            const snapshot = this.buildExportSnapshot();
+            if (!snapshot) {
+                return "";
+            }
+            const safeNpcId = sanitizeFileName(snapshot.npcId || "npc");
+            const timestamp = buildFileTimestamp(new Date());
+            const fileBase = `${safeNpcId}-${timestamp}`;
+            if (String(format || "txt").toLowerCase() === "json") {
+                return saveExportFile(`${fileBase}.json`, JSON.stringify(snapshot, null, 2), "application/json");
+            }
+            return saveExportFile(
+                `${fileBase}.txt`,
+                formatExportText(snapshot),
+                "text/plain"
+            );
         },
 
         buildStateSummary() {
@@ -476,30 +573,161 @@
         return parseIdList(value);
     }
 
+    function ensureSessionStore() {
+        if (!$gameSystem._aiNpcSessionStore) {
+            $gameSystem._aiNpcSessionStore = {};
+        }
+        return $gameSystem._aiNpcSessionStore;
+    }
+
+    function normalizeHistory(history) {
+        const entries = Array.isArray(history) ? history : [];
+        return entries.map((entry, index) => ({
+            id: Number.isInteger(Number(entry?.id)) ? Number(entry.id) : index + 1,
+            role: String(entry?.role || "assistant"),
+            speaker: String(entry?.speaker || ""),
+            text: String(entry?.text || ""),
+            timestamp: String(entry?.timestamp || "")
+        }));
+    }
+
+    function nextMessageId(history) {
+        const values = (Array.isArray(history) ? history : [])
+            .map(entry => Number(entry?.id) || 0);
+        return (values.length ? Math.max(...values) : 0) + 1;
+    }
+
+    function shortenLabel(text, maxLength) {
+        const value = String(text || "").replace(/\s+/g, " ").trim();
+        if (!value) {
+            return "Dialogue";
+        }
+        if (value.length <= maxLength) {
+            return value;
+        }
+        return `${value.slice(0, Math.max(1, maxLength - 1))}...`;
+    }
+
+    function sanitizeFileName(value) {
+        return String(value || "chat")
+            .replace(/[<>:"/\\|?*\x00-\x1f]/g, "-")
+            .replace(/\s+/g, "-")
+            .replace(/-+/g, "-")
+            .replace(/^-|-$/g, "") || "chat";
+    }
+
+    function buildFileTimestamp(date) {
+        const source = date instanceof Date ? date : new Date();
+        const parts = [
+            source.getFullYear(),
+            padNumber(source.getMonth() + 1),
+            padNumber(source.getDate()),
+            padNumber(source.getHours()),
+            padNumber(source.getMinutes()),
+            padNumber(source.getSeconds())
+        ];
+        return `${parts[0]}${parts[1]}${parts[2]}-${parts[3]}${parts[4]}${parts[5]}`;
+    }
+
+    function padNumber(value) {
+        return String(Number(value) || 0).padStart(2, "0");
+    }
+
+    function formatExportText(snapshot) {
+        const header = [
+            `NPC: ${snapshot.npcName || snapshot.npcId}`,
+            snapshot.locationName ? `Location: ${snapshot.locationName}` : "",
+            `Exported: ${snapshot.exportedAt}`,
+            snapshot.hint ? `${param.hintLabel}: ${snapshot.hint}` : ""
+        ].filter(Boolean);
+
+        const body = snapshot.history.map(entry => {
+            const stamp = entry.timestamp ? `[${entry.timestamp}] ` : "";
+            const speaker = entry.speaker ? `${entry.speaker}: ` : "";
+            return `${stamp}${speaker}${entry.text}`;
+        });
+
+        return header.concat("", body).join("\n");
+    }
+
+    function saveExportFile(fileName, content, mimeType) {
+        const localPath = tryWriteExportFile(fileName, content);
+        if (localPath) {
+            return localPath;
+        }
+
+        const blob = new Blob([content], { type: mimeType });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        return fileName;
+    }
+
+    function tryWriteExportFile(fileName, content) {
+        try {
+            if (typeof require !== "function") {
+                return "";
+            }
+            const fs = require("fs");
+            const path = require("path");
+            const exportDir = path.join(process.cwd(), "ai-chat-exports");
+            fs.mkdirSync(exportDir, { recursive: true });
+            const fullPath = path.join(exportDir, fileName);
+            fs.writeFileSync(fullPath, content, "utf8");
+            return fullPath;
+        } catch (error) {
+            return "";
+        }
+    }
+
+    function formatHistoryTime(timestamp) {
+        if (!timestamp) {
+            return "";
+        }
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) {
+            return "";
+        }
+        return `${padNumber(date.getHours())}:${padNumber(date.getMinutes())}`;
+    }
+
+    function applyStyles(element, styles) {
+        Object.assign(element.style, styles);
+        return element;
+    }
+
+    function elementRectToViewport(rect) {
+        const canvas = Graphics.app?.view || Graphics._canvas;
+        if (!canvas) {
+            return {
+                left: rect.x,
+                top: rect.y,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+        const bounds = canvas.getBoundingClientRect();
+        const scaleX = bounds.width / Graphics.boxWidth;
+        const scaleY = bounds.height / Graphics.boxHeight;
+        return {
+            left: bounds.left + rect.x * scaleX,
+            top: bounds.top + rect.y * scaleY,
+            width: rect.width * scaleX,
+            height: rect.height * scaleY
+        };
+    }
+
     class Window_AiNpcLog extends Window_Base {
         initialize(rect) {
             super.initialize(rect);
-            this._lines = [];
-        }
-
-        setLines(lines) {
-            this._lines = lines;
-            this.refresh();
         }
 
         refresh() {
             this.contents.clear();
-            const textPadding = this.itemPadding();
-            let y = 0;
-            const recentLines = this._lines.slice(-18);
-            for (const line of recentLines) {
-                const prefix = line.speaker ? `${line.speaker}: ` : "";
-                const wrapped = wrapText(`${prefix}${line.text}`, 48);
-                for (const piece of wrapped) {
-                    this.drawTextEx(piece, textPadding, y, this.contentsWidth() - textPadding * 2);
-                    y += this.lineHeight();
-                }
-            }
         }
     }
 
@@ -509,7 +737,7 @@
             this.createHelpWindow();
             this.createLogWindow();
             this.createStatusWindow();
-            this.createInputElement();
+            this.createDomChatUi();
             this.refreshWindows();
         }
 
@@ -529,6 +757,7 @@
             const rect = new Rectangle(0, y, Graphics.boxWidth, h);
             this._logWindow = new Window_AiNpcLog(rect);
             this.addWindow(this._logWindow);
+            this._logWindow.refresh();
         }
 
         createStatusWindow() {
@@ -539,30 +768,206 @@
             this.addWindow(this._statusWindow);
         }
 
-        createInputElement() {
-            this._inputWrapper = document.createElement("div");
-            this._inputWrapper.style.position = "absolute";
-            this._inputWrapper.style.zIndex = "1000";
-            this._inputWrapper.style.left = "12px";
-            this._inputWrapper.style.right = "12px";
-            this._inputWrapper.style.bottom = "20px";
+        createDomChatUi() {
+            this._activeAnchorId = null;
+            this._autoFollowTimeline = true;
+            this._lastViewportSignature = "";
+            this._suppressScrollSync = false;
 
-            this._inputElement = document.createElement("textarea");
-            this._inputElement.rows = 2;
+            this._domRoot = applyStyles(document.createElement("div"), {
+                position: "fixed",
+                zIndex: "1000",
+                pointerEvents: "none"
+            });
+
+            this._chatShell = applyStyles(document.createElement("div"), {
+                width: "100%",
+                height: "100%",
+                display: "grid",
+                gridTemplateColumns: "1fr 72px",
+                gap: "14px",
+                pointerEvents: "auto"
+            });
+
+            this._mainPanel = applyStyles(document.createElement("div"), {
+                display: "flex",
+                flexDirection: "column",
+                minHeight: "0",
+                borderRadius: "18px",
+                border: "1px solid rgba(255,255,255,0.2)",
+                background: "linear-gradient(180deg, rgba(30,34,46,0.92), rgba(18,22,31,0.92))",
+                boxShadow: "0 18px 36px rgba(0,0,0,0.25)",
+                overflow: "hidden"
+            });
+
+            const toolbar = applyStyles(document.createElement("div"), {
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                padding: "14px 16px 10px"
+            });
+
+            const toolbarTitle = applyStyles(document.createElement("div"), {
+                color: "rgba(255,255,255,0.94)",
+                fontSize: "15px",
+                fontWeight: "700",
+                letterSpacing: "0.03em"
+            });
+            toolbarTitle.textContent = "Conversation";
+
+            const actionRow = applyStyles(document.createElement("div"), {
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                flexWrap: "wrap",
+                justifyContent: "flex-end"
+            });
+
+            this._latestButton = this.createToolbarButton("Latest");
+            this._latestButton.addEventListener("click", () => this.focusLatestAnchor(true));
+            actionRow.appendChild(this._latestButton);
+
+            this._exportTxtButton = this.createToolbarButton("Export TXT");
+            this._exportTxtButton.addEventListener("click", () => this.exportConversation("txt"));
+            actionRow.appendChild(this._exportTxtButton);
+
+            this._exportJsonButton = this.createToolbarButton("Export JSON");
+            this._exportJsonButton.addEventListener("click", () => this.exportConversation("json"));
+            actionRow.appendChild(this._exportJsonButton);
+
+            toolbar.appendChild(toolbarTitle);
+            toolbar.appendChild(actionRow);
+
+            this._transcriptElement = applyStyles(document.createElement("div"), {
+                flex: "1",
+                minHeight: "0",
+                overflowY: "auto",
+                padding: "6px 16px 18px",
+                display: "grid",
+                gap: "14px",
+                scrollBehavior: "smooth"
+            });
+            this._transcriptElement.addEventListener("scroll", this.onTranscriptScroll.bind(this));
+
+            const composer = applyStyles(document.createElement("div"), {
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: "10px",
+                alignItems: "end",
+                padding: "12px 16px 16px",
+                borderTop: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)"
+            });
+
+            this._inputElement = applyStyles(document.createElement("textarea"), {
+                width: "100%",
+                minHeight: "84px",
+                resize: "none",
+                padding: "14px 16px",
+                borderRadius: "16px",
+                border: "1px solid rgba(255,255,255,0.16)",
+                background: "rgba(245,247,251,0.96)",
+                color: "#16202c",
+                fontSize: "16px",
+                lineHeight: "1.55",
+                boxSizing: "border-box",
+                outline: "none",
+                fontFamily: "\"Trebuchet MS\", \"Segoe UI\", sans-serif"
+            });
+            this._inputElement.rows = 3;
             this._inputElement.placeholder = "Type your message...";
-            this._inputElement.style.width = "100%";
-            this._inputElement.style.resize = "none";
-            this._inputElement.style.padding = "10px 12px";
-            this._inputElement.style.fontSize = "18px";
-            this._inputElement.style.border = "2px solid #303040";
-            this._inputElement.style.borderRadius = "6px";
-            this._inputElement.style.background = "rgba(255,255,255,0.95)";
-            this._inputElement.style.boxSizing = "border-box";
             this._inputElement.addEventListener("keydown", this.onInputKeyDown.bind(this));
 
-            this._inputWrapper.appendChild(this._inputElement);
-            document.body.appendChild(this._inputWrapper);
+            this._sendButton = applyStyles(document.createElement("button"), {
+                border: "0",
+                borderRadius: "16px",
+                padding: "14px 18px",
+                minWidth: "92px",
+                background: "linear-gradient(135deg, #dfc47a, #c78b41)",
+                color: "#1b1611",
+                fontSize: "14px",
+                fontWeight: "700",
+                cursor: "pointer",
+                boxShadow: "0 10px 20px rgba(0,0,0,0.18)"
+            });
+            this._sendButton.textContent = "Send";
+            this._sendButton.addEventListener("click", () => this.submitInput());
+
+            composer.appendChild(this._inputElement);
+            composer.appendChild(this._sendButton);
+
+            this._mainPanel.appendChild(toolbar);
+            this._mainPanel.appendChild(this._transcriptElement);
+            this._mainPanel.appendChild(composer);
+
+            this._timelinePanel = applyStyles(document.createElement("div"), {
+                borderRadius: "18px",
+                border: "1px solid rgba(255,255,255,0.16)",
+                background: "linear-gradient(180deg, rgba(16,18,24,0.95), rgba(8,10,14,0.95))",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "12px",
+                padding: "16px 10px",
+                boxShadow: "0 18px 36px rgba(0,0,0,0.22)"
+            });
+
+            const timelineTitle = applyStyles(document.createElement("div"), {
+                color: "rgba(255,255,255,0.72)",
+                fontSize: "11px",
+                fontWeight: "700",
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                writingMode: "vertical-rl",
+                transform: "rotate(180deg)"
+            });
+            timelineTitle.textContent = "History";
+
+            this._timelineElement = applyStyles(document.createElement("div"), {
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "12px",
+                flex: "1",
+                width: "100%",
+                overflowY: "auto",
+                padding: "6px 0"
+            });
+
+            const timelineHint = applyStyles(document.createElement("div"), {
+                color: "rgba(255,255,255,0.56)",
+                fontSize: "10px",
+                lineHeight: "1.4",
+                textAlign: "center"
+            });
+            timelineHint.textContent = "Jump to earlier turns";
+
+            this._timelinePanel.appendChild(timelineTitle);
+            this._timelinePanel.appendChild(this._timelineElement);
+            this._timelinePanel.appendChild(timelineHint);
+
+            this._chatShell.appendChild(this._mainPanel);
+            this._chatShell.appendChild(this._timelinePanel);
+            this._domRoot.appendChild(this._chatShell);
+            document.body.appendChild(this._domRoot);
+            this.syncDomLayout(true);
             this._inputElement.focus();
+        }
+
+        createToolbarButton(label) {
+            const button = applyStyles(document.createElement("button"), {
+                border: "1px solid rgba(255,255,255,0.14)",
+                borderRadius: "999px",
+                padding: "8px 12px",
+                background: "rgba(255,255,255,0.06)",
+                color: "rgba(255,255,255,0.88)",
+                fontSize: "12px",
+                fontWeight: "700",
+                cursor: "pointer"
+            });
+            button.textContent = label;
+            return button;
         }
 
         onInputKeyDown(event) {
@@ -584,6 +989,7 @@
                 return;
             }
             this._busy = true;
+            this._autoFollowTimeline = true;
             this._inputElement.value = "";
             this._statusMessage = param.thinkingText;
             this.refreshWindows();
@@ -601,7 +1007,7 @@
 
         refreshWindows() {
             this.refreshHelpWindow();
-            this._logWindow.setLines(AiNpcDialogue.session ? AiNpcDialogue.session.history : []);
+            this.refreshChatDom();
             this.refreshStatusWindow();
         }
 
@@ -623,40 +1029,339 @@
             this._statusWindow.drawText(status, 0, 0, this._statusWindow.contentsWidth(), "left");
         }
 
+        refreshChatDom() {
+            if (!this._transcriptElement || !this._timelineElement) {
+                return;
+            }
+            const session = AiNpcDialogue.session;
+            const history = session ? session.history : [];
+            const anchors = AiNpcDialogue.getTimelineEntries();
+            this._anchorGroups = this.buildAnchorGroups(history, anchors);
+
+            if (!this._activeAnchorId) {
+                this._activeAnchorId = this.getLatestAnchorId();
+            }
+
+            this.renderTranscript();
+            this.renderTimeline();
+            this.syncComposerState();
+        }
+
+        buildAnchorGroups(history, anchors) {
+            if (!Array.isArray(anchors) || anchors.length === 0) {
+                return [];
+            }
+            return anchors.map((anchor, index) => {
+                const nextAnchor = anchors[index + 1];
+                return {
+                    anchor,
+                    messages: history.slice(anchor.index, nextAnchor ? nextAnchor.index : history.length)
+                };
+            });
+        }
+
+        renderTranscript() {
+            this._transcriptElement.innerHTML = "";
+            this._anchorElements = new Map();
+            const groups = Array.isArray(this._anchorGroups) ? this._anchorGroups : [];
+
+            if (groups.length === 0) {
+                const empty = applyStyles(document.createElement("div"), {
+                    padding: "24px",
+                    borderRadius: "18px",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px dashed rgba(255,255,255,0.18)",
+                    color: "rgba(255,255,255,0.64)",
+                    textAlign: "center",
+                    lineHeight: "1.6"
+                });
+                empty.textContent = "Start talking to create the first turn in this conversation.";
+                this._transcriptElement.appendChild(empty);
+                return;
+            }
+
+            for (const group of groups) {
+                const section = applyStyles(document.createElement("section"), {
+                    display: "grid",
+                    gap: "10px",
+                    padding: "12px",
+                    borderRadius: "18px",
+                    background: group.anchor.id === this._activeAnchorId
+                        ? "rgba(255,255,255,0.09)"
+                        : "rgba(255,255,255,0.04)",
+                    border: group.anchor.id === this._activeAnchorId
+                        ? "1px solid rgba(255,255,255,0.18)"
+                        : "1px solid rgba(255,255,255,0.08)"
+                });
+                section.dataset.anchorId = group.anchor.id;
+
+                const label = applyStyles(document.createElement("div"), {
+                    color: "rgba(255,255,255,0.58)",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase"
+                });
+                label.textContent = `${group.anchor.speaker || "Dialogue"} · ${group.anchor.label}`;
+                section.appendChild(label);
+
+                for (const message of group.messages) {
+                    section.appendChild(this.createBubble(message));
+                }
+
+                this._transcriptElement.appendChild(section);
+                this._anchorElements.set(group.anchor.id, section);
+            }
+
+            this.afterTranscriptRender();
+        }
+
+        createBubble(message) {
+            const role = String(message?.role || "assistant");
+            const alignment = role === "user" ? "flex-end" : role === "system" ? "center" : "flex-start";
+            const bubble = applyStyles(document.createElement("div"), {
+                display: "flex",
+                justifyContent: alignment
+            });
+
+            const card = applyStyles(document.createElement("article"), {
+                maxWidth: role === "system" ? "88%" : "82%",
+                padding: role === "system" ? "10px 14px" : "12px 14px",
+                borderRadius: role === "system" ? "16px" : "18px",
+                background: role === "user"
+                    ? "linear-gradient(135deg, rgba(226,198,116,0.96), rgba(196,133,58,0.96))"
+                    : role === "system"
+                      ? "rgba(147, 196, 255, 0.18)"
+                      : "rgba(255,255,255,0.96)",
+                color: role === "user" ? "#20140b" : role === "system" ? "#f0f7ff" : "#1b2130",
+                boxShadow: "0 10px 24px rgba(0,0,0,0.16)"
+            });
+
+            const meta = applyStyles(document.createElement("div"), {
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                marginBottom: "6px",
+                fontSize: "11px",
+                fontWeight: "700",
+                letterSpacing: "0.04em",
+                opacity: "0.72"
+            });
+            meta.textContent = `${message.speaker || "Narrator"}${formatHistoryTime(message.timestamp) ? ` · ${formatHistoryTime(message.timestamp)}` : ""}`;
+
+            const text = applyStyles(document.createElement("div"), {
+                whiteSpace: "pre-wrap",
+                lineHeight: "1.65",
+                wordBreak: "break-word",
+                fontSize: "14px"
+            });
+            text.textContent = String(message?.text || "");
+
+            card.appendChild(meta);
+            card.appendChild(text);
+            bubble.appendChild(card);
+            return bubble;
+        }
+
+        afterTranscriptRender() {
+            const latestAnchorId = this.getLatestAnchorId();
+            if (!this._activeAnchorId) {
+                this._activeAnchorId = latestAnchorId;
+            }
+
+            if (this._pendingAnchorId) {
+                const targetAnchorId = this._pendingAnchorId;
+                this._pendingAnchorId = null;
+                this.scrollToAnchor(targetAnchorId, false);
+                return;
+            }
+
+            if (this._autoFollowTimeline && latestAnchorId) {
+                this.scrollToAnchor(latestAnchorId, false, true);
+            }
+        }
+
+        renderTimeline() {
+            this._timelineElement.innerHTML = "";
+            const groups = Array.isArray(this._anchorGroups) ? this._anchorGroups : [];
+
+            if (groups.length === 0) {
+                const empty = applyStyles(document.createElement("div"), {
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "999px",
+                    background: "rgba(255,255,255,0.24)"
+                });
+                this._timelineElement.appendChild(empty);
+                return;
+            }
+
+            for (const group of groups) {
+                const button = applyStyles(document.createElement("button"), {
+                    width: "14px",
+                    height: "14px",
+                    borderRadius: "999px",
+                    border: group.anchor.id === this._activeAnchorId
+                        ? "2px solid rgba(255,255,255,0.95)"
+                        : "1px solid rgba(255,255,255,0.55)",
+                    background: group.anchor.id === this._activeAnchorId
+                        ? "rgba(255,255,255,0.94)"
+                        : "rgba(255,255,255,0.48)",
+                    cursor: "pointer",
+                    padding: "0",
+                    boxShadow: group.anchor.id === this._activeAnchorId
+                        ? "0 0 0 4px rgba(255,255,255,0.12)"
+                        : "none",
+                    transition: "transform 0.16s ease, background 0.16s ease"
+                });
+                button.title = `${group.anchor.speaker}: ${group.anchor.label}`;
+                button.addEventListener("click", () => this.scrollToAnchor(group.anchor.id, true));
+                this._timelineElement.appendChild(button);
+            }
+        }
+
+        syncComposerState() {
+            const disabled = !!this._busy;
+            if (this._inputElement) {
+                this._inputElement.disabled = disabled;
+            }
+            if (this._sendButton) {
+                this._sendButton.disabled = disabled;
+                this._sendButton.style.opacity = disabled ? "0.65" : "1";
+                this._sendButton.style.cursor = disabled ? "not-allowed" : "pointer";
+            }
+            if (this._latestButton) {
+                this._latestButton.disabled = disabled;
+            }
+            if (this._exportTxtButton) {
+                this._exportTxtButton.disabled = disabled;
+            }
+            if (this._exportJsonButton) {
+                this._exportJsonButton.disabled = disabled;
+            }
+        }
+
+        getLatestAnchorId() {
+            const groups = Array.isArray(this._anchorGroups) ? this._anchorGroups : [];
+            return groups.length > 0 ? groups[groups.length - 1].anchor.id : null;
+        }
+
+        focusLatestAnchor(smooth) {
+            const anchorId = this.getLatestAnchorId();
+            if (anchorId) {
+                this.scrollToAnchor(anchorId, !!smooth, true);
+            }
+        }
+
+        scrollToAnchor(anchorId, smooth, forceFollow) {
+            const element = this._anchorElements?.get(anchorId);
+            this._activeAnchorId = anchorId;
+            this._autoFollowTimeline = !!forceFollow || anchorId === this.getLatestAnchorId();
+            this.renderTimeline();
+
+            if (!element) {
+                this._pendingAnchorId = anchorId;
+                return;
+            }
+
+            this._suppressScrollSync = true;
+            element.scrollIntoView({
+                behavior: smooth ? "smooth" : "auto",
+                block: "start"
+            });
+            setTimeout(() => {
+                this._suppressScrollSync = false;
+            }, smooth ? 220 : 0);
+        }
+
+        onTranscriptScroll() {
+            if (this._suppressScrollSync || !this._transcriptElement) {
+                return;
+            }
+
+            const groups = Array.isArray(this._anchorGroups) ? this._anchorGroups : [];
+            if (groups.length === 0) {
+                return;
+            }
+
+            const scrollTop = this._transcriptElement.scrollTop;
+            const threshold = scrollTop + 30;
+            let activeAnchorId = groups[0].anchor.id;
+
+            for (const group of groups) {
+                const element = this._anchorElements?.get(group.anchor.id);
+                if (element && element.offsetTop <= threshold) {
+                    activeAnchorId = group.anchor.id;
+                }
+            }
+
+            const nearBottom = scrollTop + this._transcriptElement.clientHeight >= this._transcriptElement.scrollHeight - 30;
+            this._autoFollowTimeline = nearBottom;
+
+            if (activeAnchorId !== this._activeAnchorId) {
+                this._activeAnchorId = activeAnchorId;
+                this.renderTimeline();
+            }
+        }
+
+        exportConversation(format) {
+            try {
+                const path = AiNpcDialogue.exportSession(format);
+                this._statusMessage = path
+                    ? `Exported ${String(format || "txt").toUpperCase()} to ${path}`
+                    : "Nothing to export yet.";
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this._statusMessage = `Export failed: ${message}`;
+            }
+            this.refreshStatusWindow();
+        }
+
+        syncDomLayout(force) {
+            if (!this._domRoot || !this._logWindow) {
+                return;
+            }
+            const viewport = elementRectToViewport(this._logWindow);
+            const signature = [
+                Math.round(viewport.left),
+                Math.round(viewport.top),
+                Math.round(viewport.width),
+                Math.round(viewport.height)
+            ].join(":");
+
+            if (!force && signature === this._lastViewportSignature) {
+                return;
+            }
+
+            this._lastViewportSignature = signature;
+            applyStyles(this._domRoot, {
+                left: `${viewport.left + 10}px`,
+                top: `${viewport.top + 10}px`,
+                width: `${Math.max(0, viewport.width - 20)}px`,
+                height: `${Math.max(0, viewport.height - 20)}px`
+            });
+        }
+
         update() {
             super.update();
-            if (this._inputElement && document.activeElement !== this._inputElement && !this._busy) {
+            this.syncDomLayout(false);
+            if (
+                this._inputElement &&
+                !this._busy &&
+                document.activeElement !== this._inputElement &&
+                !this._domRoot?.contains(document.activeElement)
+            ) {
                 this._inputElement.focus();
             }
         }
 
         terminate() {
             super.terminate();
-            if (this._inputWrapper && this._inputWrapper.parentNode) {
-                this._inputWrapper.parentNode.removeChild(this._inputWrapper);
+            if (this._domRoot && this._domRoot.parentNode) {
+                this._domRoot.parentNode.removeChild(this._domRoot);
             }
         }
-    }
-
-    function wrapText(text, maxLength) {
-        const source = String(text || "");
-        const result = [];
-        let line = "";
-        for (const char of source) {
-            if (char === "\n") {
-                result.push(line);
-                line = "";
-            } else if (line.length >= maxLength) {
-                result.push(line);
-                line = char;
-            } else {
-                line += char;
-            }
-        }
-        if (line) {
-            result.push(line);
-        }
-        return result.length ? result : [""];
     }
 
     PluginManager.registerCommand(pluginName, "setGlobalContext", args => {

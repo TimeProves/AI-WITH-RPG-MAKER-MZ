@@ -4,6 +4,7 @@ AI workbench for RPG Maker MZ with:
 
 - natural-language map planning
 - NPC dialogue powered by a local proxy
+- an AI chat scene with timeline dots, jump navigation, and export tools
 - NPC profile and quest-state generation
 - common event and item scaffolding
 - a local web UI for preview, apply, backup, and undo
