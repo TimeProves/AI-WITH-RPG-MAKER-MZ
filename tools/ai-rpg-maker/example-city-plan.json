@@ -1,0 +1,82 @@
+{
+  "mapName": "Royal Capital",
+  "displayName": "Royal Capital",
+  "width": 40,
+  "height": 30,
+  "tilesetId": 1,
+  "buildings": [
+    {
+      "name": "Palace",
+      "kind": "palace",
+      "x": 14,
+      "y": 2,
+      "w": 12,
+      "h": 8,
+      "doorX": 20,
+      "doorY": 10,
+      "interiorMapName": "Palace Interior",
+      "interiorWidth": 17,
+      "interiorHeight": 13,
+      "returnX": 20,
+      "returnY": 11
+    },
+    {
+      "name": "Tavern",
+      "kind": "tavern",
+      "x": 3,
+      "y": 18,
+      "w": 10,
+      "h": 7,
+      "doorX": 8,
+      "doorY": 25,
+      "interiorMapName": "Tavern",
+      "interiorWidth": 17,
+      "interiorHeight": 13,
+      "returnX": 8,
+      "returnY": 26
+    },
+    {
+      "name": "Hero House",
+      "kind": "house",
+      "x": 29,
+      "y": 16,
+      "w": 8,
+      "h": 6,
+      "doorX": 33,
+      "doorY": 22,
+      "interiorMapName": "Hero House",
+      "interiorWidth": 17,
+      "interiorHeight": 13,
+      "returnX": 33,
+      "returnY": 23
+    }
+  ],
+  "cityExits": [
+    {
+      "name": "South Gate",
+      "x": 20,
+      "y": 29,
+      "targetMapName": "World Map",
+      "targetX": 10,
+      "targetY": 12,
+      "direction": 2
+    }
+  ],
+  "npcs": [
+    {
+      "name": "Captain Rowan",
+      "role": "mainQuest",
+      "x": 20,
+      "y": 13
+    },
+    {
+      "name": "Innkeeper",
+      "role": "service",
+      "x": 8,
+      "y": 26
+    }
+  ],
+  "notes": [
+    "Generated example plan"
+  ]
+}

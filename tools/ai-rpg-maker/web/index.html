@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI RPG Maker Workbench</title>
+  <style>
+    :root {
+      --bg: #f5efe3;
+      --bg-deep: #dfd2b7;
+      --panel: rgba(255, 250, 242, 0.88);
+      --panel-strong: #fff8ee;
+      --line: rgba(83, 58, 30, 0.18);
+      --text: #35271a;
+      --muted: #75614c;
+      --accent: #7f4f24;
+      --accent-2: #2d6a4f;
+      --danger: #9c2f2f;
+      --shadow: 0 18px 50px rgba(67, 45, 17, 0.14);
+      --radius: 22px;
+      --radius-sm: 14px;
+      --font-display: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      --font-body: "Trebuchet MS", "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font-body);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 35%),
+        linear-gradient(135deg, rgba(223, 210, 183, 0.9), rgba(245, 239, 227, 0.95));
+    }
+
+    .shell {
+      width: min(1400px, calc(100vw - 32px));
+      margin: 20px auto;
+      display: grid;
+      grid-template-columns: 380px minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .left {
+      padding: 22px;
+      position: sticky;
+      top: 20px;
+      align-self: start;
+    }
+
+    .brand {
+      margin-bottom: 18px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.05;
+      font-family: var(--font-display);
+      letter-spacing: 0.02em;
+    }
+
+    .brand p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(127, 79, 36, 0.09);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    input[type="text"],
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--text);
+      font: inherit;
+      outline: none;
+      transition: border-color 0.18s ease, transform 0.18s ease;
+    }
+
+    input[type="text"]:focus,
+    textarea:focus {
+      border-color: rgba(127, 79, 36, 0.5);
+      transform: translateY(-1px);
+    }
+
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .toggle-row {
+      display: grid;
+      gap: 10px;
+      margin: 18px 0;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid var(--line);
+    }
+
+    .toggle small {
+      display: block;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .actions {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 18px;
+      padding: 14px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(53, 39, 26, 0.16);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #8b5e34, #6f4518);
+      color: #fff8f1;
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #396451, #254736);
+      color: #f5fff8;
+    }
+
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .right {
+      display: grid;
+      gap: 20px;
+    }
+
+    .hero {
+      padding: 22px;
+      overflow: hidden;
+      position: relative;
+      min-height: 190px;
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.9), transparent 34%),
+        linear-gradient(125deg, rgba(255, 249, 239, 0.95), rgba(223, 210, 183, 0.86));
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -30px;
+      bottom: -40px;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: rgba(127, 79, 36, 0.07);
+    }
+
+    .hero h2 {
+      margin: 0 0 10px;
+      font-family: var(--font-display);
+      font-size: 32px;
+    }
+
+    .hero p {
+      max-width: 760px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .metrics {
+      margin-top: 20px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.76);
+      border: 1px solid var(--line);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 28px;
+      font-family: var(--font-display);
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      padding: 20px;
+    }
+
+    .card h3 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      font-family: var(--font-display);
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+      max-height: 310px;
+      overflow: auto;
+    }
+
+    .item {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.74);
+      border: 1px solid var(--line);
+    }
+
+    .item strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .item small {
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    pre.log {
+      margin: 0;
+      padding: 16px;
+      min-height: 160px;
+      max-height: 260px;
+      overflow: auto;
+      border-radius: 18px;
+      background: #2d241d;
+      color: #f0e3d0;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .status {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .status.ok {
+      border-color: rgba(45, 106, 79, 0.24);
+      color: #1b4c37;
+    }
+
+    .status.error {
+      border-color: rgba(156, 47, 47, 0.25);
+      color: var(--danger);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(127, 79, 36, 0.1);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 1100px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .left {
+        position: static;
+      }
+
+      .metrics,
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100vw - 18px, 100%);
+        margin: 10px auto;
+      }
+
+      .metrics,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="panel left">
+      <div class="brand">
+        <div class="tag">AI Workbench</div>
+        <h1>RPG Maker 内容工作台</h1>
+        <p>输入一句自然语言，先预览地图、NPC、任务和物品，再一键落进项目数据。现在先走稳定的本地代理路线，不碰编辑器本体。</p>
+      </div>
+
+      <div class="field">
+        <label for="projectDir">项目目录</label>
+        <input id="projectDir" type="text" placeholder="例如：C:\MyGame">
+      </div>
+
+      <div class="field">
+        <label for="slug">输出标识</label>
+        <input id="slug" type="text" placeholder="例如：royal-capital">
+      </div>
+
+      <div class="field">
+        <label for="prompt">创作需求</label>
+        <textarea id="prompt" placeholder="例如：创建一个王都，北边王宫，西南酒馆，东南旅店，东侧主角家。要有1条主线，2个支线，关键NPC随着剧情推进改变对话。"></textarea>
+      </div>
+
+      <div class="toggle-row">
+        <label class="toggle">
+          <span>
+            <strong>写入物品</strong>
+            <small>把生成的物品同步写入 Items.json</small>
+          </span>
+          <input id="writeItems" type="checkbox" checked>
+        </label>
+        <label class="toggle">
+          <span>
+            <strong>安装插件</strong>
+            <small>把 AI 对话插件复制到目标项目</small>
+          </span>
+          <input id="installPlugin" type="checkbox" checked>
+        </label>
+        <label class="toggle">
+          <span>
+            <strong>生成美术提示词</strong>
+            <small>先生成提示词包，后续再接真实图像 API</small>
+          </span>
+          <input id="withAssets" type="checkbox">
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="previewBtn" class="btn-primary">生成预览</button>
+        <button id="applyBtn" class="btn-secondary">应用到项目</button>
+        <button id="undoBtn" class="btn-ghost">撤销上一次应用</button>
+        <button id="fillExampleBtn" class="btn-ghost">填入示例</button>
+      </div>
+
+      <div id="status" class="status">等待输入。建议先点“生成预览”，确认地图和任务方向没跑偏，再点“应用到项目”。</div>
+    </section>
+
+    <section class="right">
+      <article class="panel hero">
+        <h2 id="heroTitle">还没有预览结果</h2>
+        <p id="heroText">预览生成后，这里会显示地图名、主要建筑、NPC 数量、任务数量，以及这次会落进项目的内容概况。</p>
+        <div class="metrics">
+          <div class="metric"><strong id="metricBuildings">0</strong><span>Buildings</span></div>
+          <div class="metric"><strong id="metricNpcs">0</strong><span>NPCs</span></div>
+          <div class="metric"><strong id="metricQuests">0</strong><span>Quests</span></div>
+          <div class="metric"><strong id="metricItems">0</strong><span>Items</span></div>
+        </div>
+      </article>
+
+      <section class="grid">
+        <article class="panel card">
+          <h3>地图规划</h3>
+          <div id="mapList" class="list"></div>
+        </article>
+        <article class="panel card">
+          <h3>NPC 与任务</h3>
+          <div id="npcList" class="list"></div>
+        </article>
+        <article class="panel card">
+          <h3>物品与事件</h3>
+          <div id="contentList" class="list"></div>
+        </article>
+        <article class="panel card">
+          <h3>文件变更预览</h3>
+          <div id="diffList" class="list"></div>
+        </article>
+        <article class="panel card">
+          <h3>应用日志</h3>
+          <pre id="applyLog" class="log">还没有执行应用。</pre>
+        </article>
+      </section>
+    </section>
+  </div>
+
+  <script>
+    const elements = {
+      projectDir: document.getElementById("projectDir"),
+      slug: document.getElementById("slug"),
+      prompt: document.getElementById("prompt"),
+      writeItems: document.getElementById("writeItems"),
+      installPlugin: document.getElementById("installPlugin"),
+      withAssets: document.getElementById("withAssets"),
+      previewBtn: document.getElementById("previewBtn"),
+      applyBtn: document.getElementById("applyBtn"),
+      fillExampleBtn: document.getElementById("fillExampleBtn"),
+      undoBtn: document.getElementById("undoBtn"),
+      status: document.getElementById("status"),
+      heroTitle: document.getElementById("heroTitle"),
+      heroText: document.getElementById("heroText"),
+      metricBuildings: document.getElementById("metricBuildings"),
+      metricNpcs: document.getElementById("metricNpcs"),
+      metricQuests: document.getElementById("metricQuests"),
+      metricItems: document.getElementById("metricItems"),
+      mapList: document.getElementById("mapList"),
+      npcList: document.getElementById("npcList"),
+      contentList: document.getElementById("contentList"),
+      diffList: document.getElementById("diffList"),
+      applyLog: document.getElementById("applyLog")
+    };
+
+    let latestPreview = null;
+
+    elements.previewBtn.addEventListener("click", onPreview);
+    elements.applyBtn.addEventListener("click", onApply);
+    elements.undoBtn.addEventListener("click", onUndo);
+    elements.fillExampleBtn.addEventListener("click", fillExample);
+
+    function fillExample() {
+      elements.prompt.value = "创建一个王都，北边王宫，西南酒馆，东南旅店，东侧主角家。要有1条主线，2个支线，关键NPC随着剧情推进改变对话。";
+      elements.slug.value = "royal-capital";
+      setStatus("已填入示例需求。你可以直接预览，也可以先换成自己的设定。", "ok");
+    }
+
+    async function onPreview() {
+      const prompt = elements.prompt.value.trim();
+      if (!prompt) {
+        setStatus("先输入创作需求。", "error");
+        return;
+      }
+
+      setBusy(true);
+      setStatus("正在生成预览，这一步会同时跑地图规划和内容规划。", "");
+      try {
+        const payload = {
+          prompt,
+          projectDir: elements.projectDir.value.trim(),
+          slug: elements.slug.value.trim(),
+          withAssets: elements.withAssets.checked,
+          writeItems: elements.writeItems.checked,
+          installPlugin: elements.installPlugin.checked
+        };
+        const result = await postJson("/pipeline/preview", payload);
+        latestPreview = result;
+        renderPreview(result);
+        setStatus("预览生成完成。确认没问题后，可以直接应用到项目。", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function onApply() {
+      const prompt = elements.prompt.value.trim();
+      const projectDir = elements.projectDir.value.trim();
+      if (!prompt) {
+        setStatus("先输入创作需求。", "error");
+        return;
+      }
+      if (!projectDir) {
+        setStatus("应用前需要填写项目目录。", "error");
+        return;
+      }
+
+      setBusy(true);
+      setStatus("正在把规划落进项目文件，这一步会更新地图、NPC 配置、任务公共事件和可选物品。", "");
+      try {
+        const payload = {
+          prompt,
+          projectDir,
+          slug: elements.slug.value.trim(),
+          writeItems: elements.writeItems.checked,
+          installPlugin: elements.installPlugin.checked,
+          withAssets: elements.withAssets.checked
+        };
+        const result = await postJson("/pipeline/apply", payload);
+        elements.applyLog.textContent = result.stdout || "已应用，但没有返回日志。";
+        if (result.summary) {
+          latestPreview = latestPreview || {};
+          latestPreview.summary = result.summary.counts || latestPreview.summary;
+        }
+        setStatus("应用完成。现在可以去目标项目里查看新增地图、公共事件和 AI NPC 配置。", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function onUndo() {
+      const projectDir = elements.projectDir.value.trim();
+      if (!projectDir) {
+        setStatus("撤销前需要填写项目目录。", "error");
+        return;
+      }
+
+      setBusy(true);
+      setStatus("正在恢复上一次自动备份。", "");
+      try {
+        const result = await postJson("/pipeline/undo", { projectDir });
+        elements.applyLog.textContent = JSON.stringify(result, null, 2);
+        setStatus("已恢复上一次应用前的备份。你可以重新预览后再应用。", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function postJson(url, body) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+      const text = await response.text();
+      const json = text ? JSON.parse(text) : {};
+      if (!response.ok) {
+        throw new Error(json.error || text || `Request failed: ${response.status}`);
+      }
+      return json;
+    }
+
+    function renderPreview(result) {
+      const summary = result.summary || {};
+      const merged = result.mergedMapPlan || {};
+      const content = result.contentPlan || {};
+
+      elements.heroTitle.textContent = (summary.displayName || summary.mapName || "未命名区域") + " 的生成预览";
+      elements.heroText.textContent = `建筑 ${summary.buildings || 0} 个，NPC ${summary.npcs || 0} 个，任务 ${summary.quests || 0} 条，物品 ${summary.items || 0} 个。现在看到的是结构化草稿，还没有真正写入项目。`;
+      elements.metricBuildings.textContent = String(summary.buildings || 0);
+      elements.metricNpcs.textContent = String(summary.npcs || 0);
+      elements.metricQuests.textContent = String(summary.quests || 0);
+      elements.metricItems.textContent = String(summary.items || 0);
+
+      elements.mapList.innerHTML = "";
+      appendItem(elements.mapList, `${merged.displayName || merged.mapName || "主地图"}`, `尺寸 ${merged.width || 0} x ${merged.height || 0}`);
+      (merged.buildings || []).forEach(building => {
+        appendItem(elements.mapList, building.name || "建筑", `${building.kind || "building"} | 门口 (${building.doorX}, ${building.doorY})`);
+      });
+      (merged.cityExits || []).forEach(exit => {
+        appendItem(elements.mapList, exit.name || "出口", `通往 ${exit.targetMapName || "其他地图"} | 坐标 (${exit.x}, ${exit.y})`);
+      });
+
+      elements.npcList.innerHTML = "";
+      (content.npcs || []).forEach(npc => {
+        appendItem(
+          elements.npcList,
+          `${npc.name || "NPC"} · ${npc.role || "npc"}`,
+          `${npc.location || "未知地点"}\n${npc.stateContext || npc.questContext || ""}`
+        );
+      });
+      (content.quests || []).forEach(quest => {
+        appendItem(
+          elements.npcList,
+          `任务：${quest.name || "未命名任务"}`,
+          `${quest.summary || ""}\n步骤数：${(quest.steps || []).length}`
+        );
+      });
+
+      elements.contentList.innerHTML = "";
+      (content.items || []).forEach(item => {
+        appendItem(
+          elements.contentList,
+          `${item.name || "物品"} · ${item.kind || "item"}`,
+          item.description || ""
+        );
+      });
+      (content.events || []).forEach(event => {
+        appendItem(
+          elements.contentList,
+          `${event.name || "事件"} · ${event.map || "地图"}`,
+          `${event.trigger || "action"} | ${event.summary || ""}`
+        );
+      });
+
+      if (result.assetPrompts) {
+        appendItem(elements.contentList, "美术提示词包", `立绘 ${(result.assetPrompts.characterPortraits || []).length} 个，场景 ${(result.assetPrompts.locationIllustrations || []).length} 个`);
+      }
+
+      elements.diffList.innerHTML = "";
+      if (result.diff) {
+        appendItem(
+          elements.diffList,
+          "本次写入概况",
+          `地图文件 ${result.diff.summary.projectedMapFiles} 个\n任务公共事件 ${result.diff.summary.questEventCount} 个\n项目文件变更 ${result.diff.fileChanges.length} 个`
+        );
+        result.diff.fileChanges.forEach(change => {
+          appendItem(
+            elements.diffList,
+            `${change.action === "create" ? "新增" : "更新"} · ${change.path}`,
+            change.absolutePath
+          );
+        });
+      } else {
+        appendItem(elements.diffList, "还没有项目差异", "填写项目目录后再预览，就能看到这次会动到哪些文件。");
+      }
+    }
+
+    function appendItem(container, title, body) {
+      const node = document.createElement("div");
+      node.className = "item";
+      node.innerHTML = `<strong>${escapeHtml(title)}</strong><small>${escapeHtml(body).replace(/\\n/g, "<br>")}</small>`;
+      container.appendChild(node);
+    }
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function setBusy(isBusy) {
+      elements.previewBtn.disabled = isBusy;
+      elements.applyBtn.disabled = isBusy;
+      elements.undoBtn.disabled = isBusy;
+      elements.fillExampleBtn.disabled = isBusy;
+    }
+
+    function setStatus(text, kind) {
+      elements.status.textContent = text;
+      elements.status.className = "status" + (kind ? ` ${kind}` : "");
+    }
+  </script>
+</body>
+</html>

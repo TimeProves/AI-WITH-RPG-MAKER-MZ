@@ -1,0 +1,17 @@
+*
+!.gitignore
+!README.md
+!tools/
+!tools/ai-rpg-maker/
+!tools/ai-rpg-maker/**
+!newdata/
+!newdata/js/
+!newdata/js/plugins/
+!newdata/js/plugins/AiNpcDialogueMZ.js
+!newdata/data/
+!newdata/data/AiNpcProfiles.json
+
+tools/ai-rpg-maker/config.json
+tools/ai-rpg-maker/web/.DS_Store
+tools/ai-rpg-maker/**/*.log
+tools/ai-rpg-maker/**/*.tmp

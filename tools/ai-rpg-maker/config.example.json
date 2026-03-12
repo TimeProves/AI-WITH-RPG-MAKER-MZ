@@ -1,0 +1,20 @@
+{
+  "listenHost": "127.0.0.1",
+  "listenPort": 43115,
+  "provider": {
+    "baseUrl": "https://gmn.chuangzuoli.com",
+    "apiStyle": "responses",
+    "apiPath": "/v1/responses",
+    "apiKey": "REPLACE_WITH_YOUR_API_KEY",
+    "model": "gemini-2.5-flash",
+    "temperature": 0.7,
+    "maxTokens": 512,
+    "anthropicVersion": "2023-06-01"
+  },
+  "mapDefaults": {
+    "tilesetId": 1,
+    "baseFloorTileId": 2816,
+    "interiorWidth": 17,
+    "interiorHeight": 13
+  }
+}
