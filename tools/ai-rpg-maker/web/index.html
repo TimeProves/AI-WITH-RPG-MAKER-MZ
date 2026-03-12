@@ -409,6 +409,11 @@
       background: rgba(126, 79, 39, 0.08);
     }
 
+    .tree-folder.drag-target > summary {
+      background: rgba(40, 87, 68, 0.14);
+      box-shadow: inset 0 0 0 2px rgba(40, 87, 68, 0.24);
+    }
+
     .tree-folder-body {
       display: grid;
       gap: 10px;
@@ -433,6 +438,14 @@
     .tree-npc.active {
       background: rgba(126, 79, 39, 0.14);
       border-color: rgba(126, 79, 39, 0.4);
+    }
+
+    .tree-npc[draggable="true"] {
+      cursor: grab;
+    }
+
+    .tree-npc.dragging {
+      opacity: 0.45;
     }
 
     .tree-meta {
@@ -535,6 +548,40 @@
       color: var(--muted);
       font-size: 13px;
       line-height: 1.6;
+    }
+
+    .stage-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .stage-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.82);
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .stage-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .stage-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .mini-btn {
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
     }
 
     @media (max-width: 1120px) {
@@ -750,6 +797,7 @@
     let latestBackups = [];
     let latestOverview = null;
     let selectedNpcKey = null;
+    let draggedNpcKey = null;
 
     elements.previewBtn.addEventListener("click", onPreview);
     elements.applyBtn.addEventListener("click", onApply);
@@ -1081,6 +1129,24 @@ ${escapeHtml(categoryText || "")}</small>
       count.textContent = `${(node.children || []).length} submaps · ${(node.npcs || []).length} NPCs`;
       summary.appendChild(title);
       summary.appendChild(count);
+      summary.addEventListener("dragover", event => {
+        if (!draggedNpcKey) {
+          return;
+        }
+        event.preventDefault();
+        details.classList.add("drag-target");
+      });
+      summary.addEventListener("dragleave", () => {
+        details.classList.remove("drag-target");
+      });
+      summary.addEventListener("drop", async event => {
+        event.preventDefault();
+        details.classList.remove("drag-target");
+        if (!draggedNpcKey) {
+          return;
+        }
+        await moveNpcToMap(draggedNpcKey, node.id);
+      });
       details.appendChild(summary);
 
       const body = document.createElement("div");
@@ -1092,10 +1158,20 @@ ${escapeHtml(categoryText || "")}</small>
         node.npcs.forEach(npc => {
           const button = document.createElement("button");
           button.className = "tree-npc" + (npc.key === selectedNpcKey ? " active" : "");
+          button.draggable = true;
           button.innerHTML = `<strong>${escapeHtml(npc.name || npc.id || "NPC")}</strong><div class="tree-meta">NPC</div>`;
           button.addEventListener("click", () => {
             selectedNpcKey = npc.key;
             renderProjectOverview(latestOverview);
+          });
+          button.addEventListener("dragstart", () => {
+            draggedNpcKey = npc.key;
+            button.classList.add("dragging");
+          });
+          button.addEventListener("dragend", () => {
+            draggedNpcKey = null;
+            button.classList.remove("dragging");
+            document.querySelectorAll(".tree-folder.drag-target").forEach(node => node.classList.remove("drag-target"));
           });
           list.appendChild(button);
         });
@@ -1190,8 +1266,8 @@ ${escapeHtml(categoryText || "")}</small>
               <h3>Placement</h3>
               <div class="editor-row-3">
                 <div class="field">
-                  <label for="editorMap">Map</label>
-                  <input id="editorMap" type="text" value="${escapeAttr(npc.mapPath || "")}" readonly>
+                  <label for="editorMapPath">Current Map</label>
+                  <input id="editorMapPath" type="text" value="${escapeAttr(npc.mapPath || "")}" readonly>
                 </div>
                 <div class="field">
                   <label for="editorX">X</label>
@@ -1201,6 +1277,15 @@ ${escapeHtml(categoryText || "")}</small>
                   <label for="editorY">Y</label>
                   <input id="editorY" type="number" value="${escapeAttr(npc.y)}">
                 </div>
+              </div>
+              <div class="editor-row">
+                <div class="field">
+                  <label for="editorTargetMapId">Move To Map</label>
+                  <select id="editorTargetMapId">
+                    ${renderMapOptions(latestOverview, npc.mapId)}
+                  </select>
+                </div>
+                <div class="subtle">You can also drag this NPC from the left tree and drop it onto another map or submap.</div>
               </div>
               <div class="editor-row">
                 <div class="field">
@@ -1330,12 +1415,27 @@ ${escapeHtml(categoryText || "")}</small>
               </div>
               <div class="subtle">These values are sent to the AI dialogue backend so the same NPC can react differently as the story advances.</div>
             </section>
+
+            <section class="editor-section">
+              <div class="stage-head">
+                <div>
+                  <h3>Stage Dialogue</h3>
+                  <div class="subtle">Build conditional dialogue stages visually instead of hand-editing JSON.</div>
+                </div>
+                <div class="stage-actions">
+                  <button id="addStageBtn" class="ghost mini-btn" type="button">Add Stage</button>
+                </div>
+              </div>
+              <div id="stageList" class="stage-list">${renderStageCards(npc.stages || [])}</div>
+            </section>
           </div>
         </div>
       `;
 
       document.getElementById("saveNpcBtn").addEventListener("click", onSaveNpc);
       document.getElementById("reloadOverviewInlineBtn").addEventListener("click", () => loadOverview(true));
+      document.getElementById("addStageBtn").addEventListener("click", () => appendStageCard());
+      bindStageCardActions();
     }
 
     async function onSaveNpc() {
@@ -1348,6 +1448,9 @@ ${escapeHtml(categoryText || "")}</small>
 
       const payload = {
         ...npc,
+        sourceMapId: npc.sourceMapId || npc.mapId,
+        sourceEventId: npc.sourceEventId || npc.eventId,
+        mapId: Number(document.getElementById("editorTargetMapId").value || npc.mapId),
         name: document.getElementById("editorName").value.trim(),
         role: document.getElementById("editorRole").value.trim(),
         locationName: document.getElementById("editorLocation").value.trim(),
@@ -1373,7 +1476,8 @@ ${escapeHtml(categoryText || "")}</small>
         questContext: document.getElementById("editorQuestContext").value,
         stateContext: document.getElementById("editorStateContext").value,
         trackedSwitchIds: parseIdListText(document.getElementById("editorTrackedSwitchIds").value),
-        trackedVariableIds: parseIdListText(document.getElementById("editorTrackedVariableIds").value)
+        trackedVariableIds: parseIdListText(document.getElementById("editorTrackedVariableIds").value),
+        stages: readStageCards()
       };
 
       setBusy(true);
@@ -1381,6 +1485,10 @@ ${escapeHtml(categoryText || "")}</small>
       try {
         const result = await postJson("/project/npc/save", { projectDir, npc: payload });
         latestOverview = result.overview || latestOverview;
+        const refreshedNpc = latestOverview && Array.isArray(latestOverview.npcs)
+          ? latestOverview.npcs.find(entry => entry.id === npc.id)
+          : null;
+        selectedNpcKey = refreshedNpc ? refreshedNpc.key : selectedNpcKey;
         renderProjectOverview(latestOverview);
         setStatus("NPC settings saved. The profile file and event placement were updated.", "ok");
       } catch (error) {
@@ -1388,6 +1496,249 @@ ${escapeHtml(categoryText || "")}</small>
       } finally {
         setBusy(false);
       }
+    }
+
+    async function moveNpcToMap(npcKey, targetMapId) {
+      const projectDir = elements.projectDir.value.trim();
+      const npc = findNpcByKey(npcKey);
+      if (!projectDir || !npc) {
+        setStatus("Load a project and select a valid NPC before moving.", "error");
+        return;
+      }
+      if (Number(targetMapId) === Number(npc.mapId)) {
+        return;
+      }
+
+      setBusy(true);
+      setStatus(`Moving ${npc.name} to a new map and refreshing the project tree.`, "");
+      try {
+        const result = await postJson("/project/npc/save", {
+          projectDir,
+          npc: {
+            ...npc,
+            sourceMapId: npc.sourceMapId || npc.mapId,
+            sourceEventId: npc.sourceEventId || npc.eventId,
+            mapId: Number(targetMapId)
+          }
+        });
+        latestOverview = result.overview || latestOverview;
+        const movedNpc = latestOverview && Array.isArray(latestOverview.npcs)
+          ? latestOverview.npcs.find(entry => entry.id === npc.id)
+          : null;
+        selectedNpcKey = movedNpc ? movedNpc.key : null;
+        renderProjectOverview(latestOverview);
+        setStatus("NPC moved to the selected map.", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderMapOptions(overview, selectedMapId) {
+      const maps = overview && Array.isArray(overview.maps) ? overview.maps : [];
+      return maps
+        .map(map => {
+          const selected = Number(map.id) === Number(selectedMapId) ? " selected" : "";
+          return `<option value="${escapeAttr(map.id)}"${selected}>${escapeHtml(map.path || map.name || `Map ${map.id}`)}</option>`;
+        })
+        .join("");
+    }
+
+    function renderStageCards(stages) {
+      const source = Array.isArray(stages) ? stages : [];
+      if (!source.length) {
+        return createStageCardMarkup({}, 0);
+      }
+      return source.map((stage, index) => createStageCardMarkup(stage, index)).join("");
+    }
+
+    function createStageCardMarkup(stage, index) {
+      const when = stage && typeof stage.when === "object" ? stage.when : {};
+      return `
+        <article class="stage-card" data-stage-index="${escapeAttr(index)}">
+          <div class="stage-head">
+            <strong>Stage ${index + 1}</strong>
+            <div class="stage-actions">
+              <button type="button" class="ghost mini-btn" data-stage-action="duplicate">Duplicate</button>
+              <button type="button" class="ghost mini-btn" data-stage-action="remove">Remove</button>
+            </div>
+          </div>
+          <div class="editor-row">
+            <div class="field">
+              <label>Stage ID</label>
+              <input data-stage-field="id" type="text" value="${escapeAttr(stage.id || `stage_${index + 1}`)}">
+            </div>
+            <div class="field">
+              <label>Opening Line</label>
+              <input data-stage-field="openingLine" type="text" value="${escapeAttr(stage.openingLine || "")}">
+            </div>
+          </div>
+          <div class="editor-row">
+            <div class="field">
+              <label>Switch All On</label>
+              <input data-stage-field="switchAllOn" type="text" value="${escapeAttr(toIdListText(when.switchAllOn))}" placeholder="1,3,8">
+            </div>
+            <div class="field">
+              <label>Switch Any On</label>
+              <input data-stage-field="switchAnyOn" type="text" value="${escapeAttr(toIdListText(when.switchAnyOn))}" placeholder="2,5,9">
+            </div>
+          </div>
+          <div class="editor-row">
+            <div class="field">
+              <label>Switch All Off</label>
+              <input data-stage-field="switchAllOff" type="text" value="${escapeAttr(toIdListText(when.switchAllOff))}" placeholder="4,6">
+            </div>
+            <div class="field">
+              <label>Variable Conditions</label>
+              <input data-stage-field="variableMin" type="text" value="${escapeAttr(numberMapToText(when.variableMin))}" placeholder="1:5,7:2">
+            </div>
+          </div>
+          <div class="field">
+            <label>Variable Equals</label>
+            <input data-stage-field="variableEq" type="text" value="${escapeAttr(numberMapToText(when.variableEq))}" placeholder="3:10">
+          </div>
+          <div class="field">
+            <label>Persona Prompt Override</label>
+            <textarea data-stage-field="personaPrompt">${escapeHtml(stage.personaPrompt || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>Quest Context</label>
+            <textarea data-stage-field="questContext">${escapeHtml(stage.questContext || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>State Context</label>
+            <textarea data-stage-field="stateContext">${escapeHtml(stage.stateContext || "")}</textarea>
+          </div>
+          <div class="editor-row">
+            <div class="field">
+              <label>Tracked Switch IDs</label>
+              <input data-stage-field="trackedSwitchIds" type="text" value="${escapeAttr(toIdListText(stage.trackedSwitchIds))}" placeholder="1,3">
+            </div>
+            <div class="field">
+              <label>Tracked Variable IDs</label>
+              <input data-stage-field="trackedVariableIds" type="text" value="${escapeAttr(toIdListText(stage.trackedVariableIds))}" placeholder="2,5">
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function bindStageCardActions() {
+      document.querySelectorAll("[data-stage-action='remove']").forEach(button => {
+        button.addEventListener("click", () => {
+          const cards = document.querySelectorAll(".stage-card");
+          if (cards.length <= 1) {
+            const onlyCard = cards[0];
+            if (onlyCard) {
+              onlyCard.remove();
+            }
+            appendStageCard();
+            return;
+          }
+          button.closest(".stage-card").remove();
+          relabelStageCards();
+        });
+      });
+
+      document.querySelectorAll("[data-stage-action='duplicate']").forEach(button => {
+        button.addEventListener("click", () => {
+          const card = button.closest(".stage-card");
+          if (!card) {
+            return;
+          }
+          card.insertAdjacentHTML("afterend", createStageCardMarkup(readSingleStageCard(card), document.querySelectorAll(".stage-card").length));
+          bindStageCardActions();
+          relabelStageCards();
+        });
+      });
+    }
+
+    function appendStageCard() {
+      const list = document.getElementById("stageList");
+      if (!list) {
+        return;
+      }
+      list.insertAdjacentHTML("beforeend", createStageCardMarkup({}, list.querySelectorAll(".stage-card").length));
+      bindStageCardActions();
+      relabelStageCards();
+    }
+
+    function relabelStageCards() {
+      document.querySelectorAll(".stage-card").forEach((card, index) => {
+        card.dataset.stageIndex = String(index);
+        const title = card.querySelector(".stage-head strong");
+        if (title) {
+          title.textContent = `Stage ${index + 1}`;
+        }
+        const idInput = card.querySelector("[data-stage-field='id']");
+        if (idInput && !String(idInput.value || "").trim()) {
+          idInput.value = `stage_${index + 1}`;
+        }
+      });
+    }
+
+    function readStageCards() {
+      return Array.from(document.querySelectorAll(".stage-card"))
+        .map(card => readSingleStageCard(card))
+        .filter(stage => {
+          return stage.id || stage.openingLine || stage.personaPrompt || stage.questContext || stage.stateContext ||
+            stage.trackedSwitchIds.length || stage.trackedVariableIds.length ||
+            stage.when.switchAllOn.length || stage.when.switchAnyOn.length || stage.when.switchAllOff.length ||
+            Object.keys(stage.when.variableMin).length || Object.keys(stage.when.variableEq).length;
+        });
+    }
+
+    function readSingleStageCard(card) {
+      const field = name => {
+        const input = card.querySelector(`[data-stage-field='${name}']`);
+        return input ? input.value : "";
+      };
+      return {
+        id: String(field("id") || "").trim(),
+        openingLine: field("openingLine"),
+        personaPrompt: field("personaPrompt"),
+        questContext: field("questContext"),
+        stateContext: field("stateContext"),
+        trackedSwitchIds: parseIdListText(field("trackedSwitchIds")),
+        trackedVariableIds: parseIdListText(field("trackedVariableIds")),
+        when: {
+          switchAllOn: parseIdListText(field("switchAllOn")),
+          switchAnyOn: parseIdListText(field("switchAnyOn")),
+          switchAllOff: parseIdListText(field("switchAllOff")),
+          variableMin: parseNumberMapText(field("variableMin")),
+          variableEq: parseNumberMapText(field("variableEq"))
+        }
+      };
+    }
+
+    function numberMapToText(value) {
+      if (!value || typeof value !== "object") {
+        return "";
+      }
+      return Object.entries(value)
+        .map(([key, entry]) => `${key}:${entry}`)
+        .join(",");
+    }
+
+    function parseNumberMapText(value) {
+      const result = {};
+      String(value || "")
+        .split(",")
+        .map(entry => entry.trim())
+        .filter(Boolean)
+        .forEach(entry => {
+          const parts = entry.split(":");
+          if (parts.length !== 2) {
+            return;
+          }
+          const key = Number(parts[0].trim());
+          const number = Number(parts[1].trim());
+          if (Number.isInteger(key) && Number.isFinite(number)) {
+            result[String(key)] = number;
+          }
+        });
+      return result;
     }
 
     function renderSelectOptions(options, selectedValue) {

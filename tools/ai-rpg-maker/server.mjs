@@ -636,6 +636,7 @@ function buildProjectOverview(projectDir) {
     const recordsById = new Map(mapRecords.map(record => [record.id, record]));
     for (const record of mapRecords) {
         mapPathLookup.set(record.id, buildMapPathLabel(record.id, recordsById));
+        record.path = mapPathLookup.get(record.id);
     }
 
     const npcRecords = [];
@@ -699,20 +700,44 @@ function saveNpcConfig(projectDir, npcInput) {
         background: normalized.background,
         notes: normalized.notes,
         trackedSwitchIds: normalized.trackedSwitchIds,
-        trackedVariableIds: normalized.trackedVariableIds
+        trackedVariableIds: normalized.trackedVariableIds,
+        stages: normalized.stages
     });
     writeJsonFile(profilePath, profileStore);
 
-    const targetMapPath = mapFilePath(projectDir, normalized.mapId);
-    const mapData = readJsonFile(targetMapPath, null);
-    if (!mapData?.events?.[normalized.eventId]) {
-        throw new Error(`NPC event ${normalized.eventId} was not found on map ${normalized.mapId}.`);
+    const sourceMapId = Number(npcInput?.sourceMapId || normalized.mapId || 0);
+    const sourceEventId = Number(npcInput?.sourceEventId || normalized.eventId || 0);
+    const sourceMapPath = mapFilePath(projectDir, sourceMapId);
+    const sourceMapData = readJsonFile(sourceMapPath, null);
+    if (!sourceMapData?.events?.[sourceEventId]) {
+        throw new Error(`NPC event ${sourceEventId} was not found on map ${sourceMapId}.`);
     }
 
-    const event = mapData.events[normalized.eventId];
+    let targetMapId = normalized.mapId;
+    let targetMapPath = mapFilePath(projectDir, targetMapId);
+    let targetMapData = readJsonFile(targetMapPath, null);
+    if (!targetMapData?.events) {
+        throw new Error(`Target map ${targetMapId} could not be loaded.`);
+    }
+
+    let event;
+    let targetEventId = normalized.eventId;
+    if (targetMapId !== sourceMapId) {
+        event = cloneJson(sourceMapData.events[sourceEventId]);
+        sourceMapData.events[sourceEventId] = null;
+        targetEventId = nextOpenEventId(targetMapData.events);
+        event.id = targetEventId;
+        event.x = clampCoordinate(normalized.x, targetMapData.width);
+        event.y = clampCoordinate(normalized.y, targetMapData.height);
+        targetMapData.events[targetEventId] = event;
+        writeJsonFile(sourceMapPath, sourceMapData);
+    } else {
+        event = targetMapData.events[targetEventId];
+    }
+
     event.name = normalized.name;
-    event.x = normalized.x;
-    event.y = normalized.y;
+    event.x = clampCoordinate(normalized.x, targetMapData.width);
+    event.y = clampCoordinate(normalized.y, targetMapData.height);
 
     const page = Array.isArray(event.pages) ? event.pages[0] : null;
     if (page) {
@@ -745,7 +770,7 @@ function saveNpcConfig(projectDir, npcInput) {
         trackedSwitchIds: joinIdList(normalized.trackedSwitchIds),
         trackedVariableIds: joinIdList(normalized.trackedVariableIds)
     });
-    writeJsonFile(targetMapPath, mapData);
+    writeJsonFile(targetMapPath, targetMapData);
 }
 
 async function generatePipelineArtifacts(prompt, withAssets, runtimeConfig) {
@@ -1235,7 +1260,9 @@ function buildMapTree(mapRecords) {
             id: record.id,
             label: record.name,
             displayName: record.displayName,
-            path: record.name,
+            path: record.path || record.name,
+            width: record.width,
+            height: record.height,
             npcCount: Array.isArray(record.npcs) ? record.npcs.length : 0,
             npcs: Array.isArray(record.npcs) ? record.npcs : [],
             children: []
@@ -1293,10 +1320,12 @@ function extractNpcEntriesFromMap(record, profilesById, mapPath) {
             id: npcId,
             name: String(profile.name || parsed.args.npcName || event.name || "NPC"),
             mapId: record.id,
+            sourceMapId: record.id,
             mapName: record.name,
             path: `${mapPath} / ${String(profile.name || parsed.args.npcName || event.name || "NPC")}`,
             mapPath,
             eventId: Number(event.id || 0),
+            sourceEventId: Number(event.id || 0),
             eventName: String(event.name || ""),
             displayName: record.displayName,
             x: Number(event.x || 0),
@@ -1356,6 +1385,8 @@ function normalizeNpcInput(npc) {
         name: String(npc?.name || npc?.eventName || "NPC").trim() || "NPC",
         mapId: Number(npc?.mapId || 0),
         eventId: Number(npc?.eventId || 0),
+        sourceMapId: Number(npc?.sourceMapId || npc?.mapId || 0),
+        sourceEventId: Number(npc?.sourceEventId || npc?.eventId || 0),
         x: Number(npc?.x || 0),
         y: Number(npc?.y || 0),
         characterName: String(npc?.characterName || ""),
@@ -1380,7 +1411,8 @@ function normalizeNpcInput(npc) {
         role: String(npc?.role || ""),
         notes: String(npc?.notes || ""),
         trackedSwitchIds: normalizeIdList(npc?.trackedSwitchIds),
-        trackedVariableIds: normalizeIdList(npc?.trackedVariableIds)
+        trackedVariableIds: normalizeIdList(npc?.trackedVariableIds),
+        stages: normalizeStages(npc?.stages)
     };
 }
 
@@ -1398,6 +1430,66 @@ function normalizeIdList(value) {
 
 function joinIdList(values) {
     return normalizeIdList(values).join(",");
+}
+
+function normalizeStages(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value
+        .map((stage, index) => {
+            const when = stage && typeof stage.when === "object" ? stage.when : {};
+            const normalized = {
+                id: String(stage?.id || `stage_${index + 1}`).trim() || `stage_${index + 1}`,
+                openingLine: String(stage?.openingLine || ""),
+                personaPrompt: String(stage?.personaPrompt || ""),
+                questContext: String(stage?.questContext || ""),
+                stateContext: String(stage?.stateContext || ""),
+                trackedSwitchIds: normalizeIdList(stage?.trackedSwitchIds),
+                trackedVariableIds: normalizeIdList(stage?.trackedVariableIds),
+                when: {
+                    switchAllOn: normalizeIdList(when.switchAllOn),
+                    switchAnyOn: normalizeIdList(when.switchAnyOn),
+                    switchAllOff: normalizeIdList(when.switchAllOff),
+                    variableMin: normalizeNumberMap(when.variableMin),
+                    variableEq: normalizeNumberMap(when.variableEq)
+                }
+            };
+            if (!normalized.openingLine && !normalized.personaPrompt && !normalized.questContext && !normalized.stateContext && Object.values(normalized.when).every(entry => (Array.isArray(entry) ? entry.length === 0 : Object.keys(entry).length === 0))) {
+                return null;
+            }
+            return normalized;
+        })
+        .filter(Boolean);
+}
+
+function normalizeNumberMap(value) {
+    if (!value || typeof value !== "object") {
+        return {};
+    }
+    return Object.fromEntries(
+        Object.entries(value)
+            .map(([key, entry]) => [String(Number(key) || key), Number(entry)])
+            .filter(([key, entry]) => key && Number.isFinite(entry))
+    );
+}
+
+function cloneJson(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function nextOpenEventId(events) {
+    let index = 1;
+    while (events[index]) {
+        index += 1;
+    }
+    return index;
+}
+
+function clampCoordinate(value, dimension) {
+    const numeric = Number(value || 0);
+    const max = Math.max(0, Number(dimension || 0) - 1);
+    return Math.min(Math.max(0, numeric), max);
 }
 
 function updateAiNpcPluginCommand(event, args) {

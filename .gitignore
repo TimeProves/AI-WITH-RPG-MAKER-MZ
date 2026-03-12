@@ -1,6 +1,8 @@
 *
 !.gitignore
 !README.md
+!Start AI Workbench.cmd
+!Start AI Workbench.vbs
 !tools/
 !tools/ai-rpg-maker/
 !tools/ai-rpg-maker/**
