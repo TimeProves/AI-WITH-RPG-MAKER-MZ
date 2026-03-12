@@ -1,8 +1,6 @@
 # AI-WITH-RPG-MAKER-MZ
 
 > This project was completed with end-to-end support from Codex.
->
-> 本项目在 Codex 的全程支持下完成。
 
 AI workbench for RPG Maker MZ with:
 
