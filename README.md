@@ -12,6 +12,7 @@ AI workbench for RPG Maker MZ with:
 - a visual stage editor for conditional NPC dialogue states
 - NPC profile and quest-state generation
 - common event and item scaffolding
+- BDD-style feature templates and smoke tests for core local behaviors
 - a local web UI for preview, apply, backup, and undo
 
 ## Quick Start
@@ -37,6 +38,9 @@ Both launchers will:
 - `tools/ai-rpg-maker/run-workbench-server.ps1`
 - `tools/ai-rpg-maker/scaffold-game-from-prompt.mjs`
 - `tools/ai-rpg-maker/apply-content-plan.mjs`
+- `tools/ai-rpg-maker/tests/rpg-maker-bdd-template.feature`
+- `tools/ai-rpg-maker/tests/workbench-smoke.feature`
+- `tools/ai-rpg-maker/tests/run-bdd-smoke.mjs`
 - `tools/ai-rpg-maker/web/index.html`
 - `newdata/js/plugins/AiNpcDialogueMZ.js`
 
@@ -48,6 +52,7 @@ Both launchers will:
 - edit background, placement, movement, tracked states, and dialogue stages
 - preview generated content before writing it into the project
 - apply with automatic backup and restore support
+- run the BDD smoke suite to validate local project behaviors after major changes
 
 ## Supported Now
 
@@ -70,6 +75,8 @@ Both launchers will:
 - [x] Automatic backup before apply
 - [x] Restore from backup history
 - [x] Exporting NPC chat history as TXT or JSON
+- [x] BDD feature template for RPG Maker AI workflow acceptance scenarios
+- [x] Executable smoke suite for deterministic local workbench behaviors
 
 ## Not Supported Yet
 
@@ -101,6 +108,23 @@ Open:
 
 ```text
 http://127.0.0.1:43115/
+```
+
+## Tests
+
+BDD files live in `tools/ai-rpg-maker/tests/`.
+
+- `rpg-maker-bdd-template.feature`
+  Reusable acceptance-test template for maps, NPCs, dialogue stages, exports, and backup flows.
+- `workbench-smoke.feature`
+  Current smoke scenarios for the local workbench behavior.
+- `run-bdd-smoke.mjs`
+  Executable smoke runner for deterministic behaviors that do not depend on live model output.
+
+Run the smoke suite with:
+
+```powershell
+node "C:\Program Files (x86)\Steam\steamapps\common\RPG Maker MZ\tools\ai-rpg-maker\tests\run-bdd-smoke.mjs"
 ```
 
 ## Current Scope
