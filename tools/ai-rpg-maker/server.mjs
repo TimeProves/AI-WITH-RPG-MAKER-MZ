@@ -88,6 +88,18 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        if (req.method === "POST" && pathname === "/project/overview") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectOverview(body));
+            return;
+        }
+
+        if (req.method === "POST" && pathname === "/project/npc/save") {
+            const body = await readJson(req);
+            sendJson(res, 200, await handleProjectNpcSave(body));
+            return;
+        }
+
         sendJson(res, 404, { error: "Not found." });
     } catch (error) {
         sendJson(res, 500, {
@@ -563,6 +575,179 @@ async function handlePipelineBackups(body) {
     };
 }
 
+async function handleProjectOverview(body) {
+    const projectDir = String(body?.projectDir || "").trim();
+    if (!projectDir) {
+        throw new Error("Missing projectDir.");
+    }
+
+    return {
+        ok: true,
+        overview: buildProjectOverview(projectDir)
+    };
+}
+
+async function handleProjectNpcSave(body) {
+    const projectDir = String(body?.projectDir || "").trim();
+    const npc = body?.npc || {};
+    if (!projectDir) {
+        throw new Error("Missing projectDir.");
+    }
+    if (!npc || !String(npc.id || "").trim()) {
+        throw new Error("Missing npc.id.");
+    }
+
+    saveNpcConfig(projectDir, npc);
+    return {
+        ok: true,
+        overview: buildProjectOverview(projectDir)
+    };
+}
+
+function buildProjectOverview(projectDir) {
+    assertProjectShape(projectDir);
+    const dataDir = path.join(projectDir, "data");
+    const mapInfos = readJsonFile(path.join(dataDir, "MapInfos.json"), []).filter(Boolean);
+    const profileStore = ensureProfileStore(readJsonFile(path.join(dataDir, "AiNpcProfiles.json"), null));
+    const profiles = Array.isArray(profileStore.npcs) ? profileStore.npcs : [];
+    const profilesById = new Map(profiles.map(profile => [String(profile?.id || ""), profile]));
+
+    const mapRecords = mapInfos.map(info => {
+        const mapData = readJsonFile(mapFilePath(projectDir, info.id), null) || { events: [null], note: "", displayName: "" };
+        return {
+            id: Number(info.id),
+            name: String(info.name || `Map ${info.id}`),
+            displayName: String(mapData.displayName || info.name || `Map ${info.id}`),
+            note: String(mapData.note || ""),
+            width: Number(mapData.width || 0),
+            height: Number(mapData.height || 0),
+            explicitParentId: Number(info.parentId || 0),
+            effectiveParentId: 0,
+            mapData
+        };
+    });
+
+    const mapIds = new Set(mapRecords.map(record => record.id));
+    for (const record of mapRecords) {
+        record.effectiveParentId = record.explicitParentId || inferParentMapId(record.mapData, record.id, mapIds);
+    }
+
+    const mapPathLookup = new Map();
+    const recordsById = new Map(mapRecords.map(record => [record.id, record]));
+    for (const record of mapRecords) {
+        mapPathLookup.set(record.id, buildMapPathLabel(record.id, recordsById));
+    }
+
+    const npcRecords = [];
+    for (const record of mapRecords) {
+        const npcEntries = extractNpcEntriesFromMap(record, profilesById, mapPathLookup.get(record.id));
+        record.npcs = npcEntries.map(entry => ({
+            key: entry.key,
+            id: entry.id,
+            name: entry.name
+        }));
+        npcRecords.push(...npcEntries);
+    }
+
+    const tree = buildMapTree(mapRecords);
+    return {
+        projectDir,
+        worldContext: String(profileStore.worldContext || ""),
+        summary: {
+            maps: mapRecords.length,
+            npcCount: npcRecords.length,
+            profileCount: profiles.length
+        },
+        tree,
+        maps: mapRecords
+            .map(record => ({
+                id: record.id,
+                name: record.name,
+                displayName: record.displayName,
+                path: mapPathLookup.get(record.id),
+                width: record.width,
+                height: record.height,
+                npcCount: Array.isArray(record.npcs) ? record.npcs.length : 0
+            }))
+            .sort((left, right) => left.path.localeCompare(right.path)),
+        npcs: npcRecords.sort((left, right) => left.path.localeCompare(right.path) || left.name.localeCompare(right.name))
+    };
+}
+
+function saveNpcConfig(projectDir, npcInput) {
+    assertProjectShape(projectDir);
+    const dataDir = path.join(projectDir, "data");
+    const normalized = normalizeNpcInput(npcInput);
+
+    const profilePath = path.join(dataDir, "AiNpcProfiles.json");
+    const profileStore = ensureProfileStore(readJsonFile(profilePath, null));
+    let profile = profileStore.npcs.find(entry => String(entry?.id || "") === normalized.id);
+    if (!profile) {
+        profile = { id: normalized.id };
+        profileStore.npcs.push(profile);
+    }
+
+    Object.assign(profile, {
+        id: normalized.id,
+        name: normalized.name,
+        role: normalized.role,
+        locationName: normalized.locationName,
+        openingLine: normalized.openingLine,
+        personaPrompt: normalized.personaPrompt,
+        questContext: normalized.questContext,
+        stateContext: normalized.stateContext,
+        background: normalized.background,
+        notes: normalized.notes,
+        trackedSwitchIds: normalized.trackedSwitchIds,
+        trackedVariableIds: normalized.trackedVariableIds
+    });
+    writeJsonFile(profilePath, profileStore);
+
+    const targetMapPath = mapFilePath(projectDir, normalized.mapId);
+    const mapData = readJsonFile(targetMapPath, null);
+    if (!mapData?.events?.[normalized.eventId]) {
+        throw new Error(`NPC event ${normalized.eventId} was not found on map ${normalized.mapId}.`);
+    }
+
+    const event = mapData.events[normalized.eventId];
+    event.name = normalized.name;
+    event.x = normalized.x;
+    event.y = normalized.y;
+
+    const page = Array.isArray(event.pages) ? event.pages[0] : null;
+    if (page) {
+        page.moveType = normalized.moveType;
+        page.moveSpeed = normalized.moveSpeed;
+        page.moveFrequency = normalized.moveFrequency;
+        page.trigger = normalized.trigger;
+        page.priorityType = normalized.priorityType;
+        page.directionFix = normalized.directionFix;
+        page.through = normalized.through;
+        page.walkAnime = normalized.walkAnime;
+        page.stepAnime = normalized.stepAnime;
+        if (!page.image) {
+            page.image = {};
+        }
+        page.image.characterName = normalized.characterName;
+        page.image.characterIndex = normalized.characterIndex;
+        page.image.direction = normalized.direction;
+        page.image.pattern = normalized.pattern;
+    }
+
+    updateAiNpcPluginCommand(event, {
+        npcId: normalized.id,
+        npcName: normalized.name,
+        locationName: normalized.locationName,
+        openingLine: normalized.openingLine,
+        personaPrompt: normalized.personaPrompt,
+        questContext: normalized.questContext,
+        stateContext: normalized.stateContext,
+        trackedSwitchIds: joinIdList(normalized.trackedSwitchIds),
+        trackedVariableIds: joinIdList(normalized.trackedVariableIds)
+    });
+    writeJsonFile(targetMapPath, mapData);
+}
+
 async function generatePipelineArtifacts(prompt, withAssets, runtimeConfig) {
     const mapPlan = await handleMapPlan({ prompt: buildMapPrompt(prompt) }, runtimeConfig);
     const contentPlan = await handleContentPlan({ prompt: buildContentPrompt(prompt, mapPlan) }, runtimeConfig);
@@ -971,4 +1156,281 @@ function listProjectBackups(projectDir) {
         })
         .filter(Boolean)
         .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+function readJsonFile(filePath, fallbackValue) {
+    if (!fs.existsSync(filePath)) {
+        return fallbackValue;
+    }
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function writeJsonFile(filePath, value) {
+    ensureDir(path.dirname(filePath));
+    fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+}
+
+function mapFilePath(projectDir, mapId) {
+    return path.join(projectDir, "data", `Map${String(Number(mapId) || 0).padStart(3, "0")}.json`);
+}
+
+function ensureProfileStore(store) {
+    const base = store && typeof store === "object" ? store : {};
+    return {
+        version: Number(base.version || 1),
+        worldContext: String(base.worldContext || ""),
+        npcs: Array.isArray(base.npcs) ? base.npcs : []
+    };
+}
+
+function inferParentMapId(mapData, currentMapId, knownMapIds) {
+    if (!mapData || typeof mapData !== "object") {
+        return 0;
+    }
+    const note = String(mapData.note || "");
+    const shouldInfer = /<GeneratedInterior:/i.test(note) || /interior/i.test(String(mapData.displayName || ""));
+    if (!shouldInfer) {
+        return 0;
+    }
+
+    for (const event of Array.isArray(mapData.events) ? mapData.events : []) {
+        if (!event?.pages) {
+            continue;
+        }
+        for (const page of event.pages) {
+            for (const command of page?.list || []) {
+                if (command?.code !== 201 || !Array.isArray(command.parameters)) {
+                    continue;
+                }
+                const targetMapId = Number(command.parameters[1] || 0);
+                if (targetMapId > 0 && targetMapId !== currentMapId && knownMapIds.has(targetMapId)) {
+                    return targetMapId;
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+function buildMapPathLabel(mapId, recordsById) {
+    const visited = new Set();
+    const names = [];
+    let currentId = mapId;
+
+    while (currentId && recordsById.has(currentId) && !visited.has(currentId)) {
+        visited.add(currentId);
+        const record = recordsById.get(currentId);
+        names.unshift(record.name);
+        currentId = Number(record.effectiveParentId || 0);
+    }
+
+    return names.join(" / ");
+}
+
+function buildMapTree(mapRecords) {
+    const nodesById = new Map();
+    for (const record of mapRecords) {
+        nodesById.set(record.id, {
+            id: record.id,
+            label: record.name,
+            displayName: record.displayName,
+            path: record.name,
+            npcCount: Array.isArray(record.npcs) ? record.npcs.length : 0,
+            npcs: Array.isArray(record.npcs) ? record.npcs : [],
+            children: []
+        });
+    }
+
+    const roots = [];
+    for (const record of mapRecords) {
+        const node = nodesById.get(record.id);
+        const parentId = Number(record.effectiveParentId || 0);
+        if (parentId > 0 && nodesById.has(parentId)) {
+            nodesById.get(parentId).children.push(node);
+        } else {
+            roots.push(node);
+        }
+    }
+
+    const sortNodes = nodes => {
+        nodes.sort((left, right) => left.label.localeCompare(right.label));
+        for (const node of nodes) {
+            node.npcs.sort((left, right) => left.name.localeCompare(right.name));
+            sortNodes(node.children);
+        }
+    };
+
+    sortNodes(roots);
+    return roots;
+}
+
+function extractNpcEntriesFromMap(record, profilesById, mapPath) {
+    const mapData = record.mapData || {};
+    const results = [];
+    const profilesByName = new Map(
+        [...profilesById.values()]
+            .filter(profile => profile && String(profile.name || "").trim())
+            .map(profile => [String(profile.name || "").trim().toLowerCase(), profile])
+    );
+    for (const event of Array.isArray(mapData.events) ? mapData.events : []) {
+        if (!event?.pages) {
+            continue;
+        }
+        const parsed = parseAiNpcCommand(event);
+        if (!parsed) {
+            continue;
+        }
+
+        const rawNpcId = String(parsed.args.npcId || event.name || `npc_${event.id}`);
+        const fallbackName = String(parsed.args.npcName || event.name || "").trim().toLowerCase();
+        const profile = profilesById.get(rawNpcId) || profilesByName.get(fallbackName) || {};
+        const npcId = String(profile.id || rawNpcId);
+        const page = event.pages[0] || {};
+        const image = page.image || {};
+        results.push({
+            key: `${record.id}:${event.id}`,
+            id: npcId,
+            name: String(profile.name || parsed.args.npcName || event.name || "NPC"),
+            mapId: record.id,
+            mapName: record.name,
+            path: `${mapPath} / ${String(profile.name || parsed.args.npcName || event.name || "NPC")}`,
+            mapPath,
+            eventId: Number(event.id || 0),
+            eventName: String(event.name || ""),
+            displayName: record.displayName,
+            x: Number(event.x || 0),
+            y: Number(event.y || 0),
+            characterName: String(image.characterName || ""),
+            characterIndex: Number(image.characterIndex || 0),
+            direction: Number(image.direction || 2),
+            pattern: Number(image.pattern || 1),
+            moveType: Number(page.moveType ?? 0),
+            moveSpeed: Number(page.moveSpeed ?? 3),
+            moveFrequency: Number(page.moveFrequency ?? 3),
+            trigger: Number(page.trigger ?? 0),
+            priorityType: Number(page.priorityType ?? 1),
+            directionFix: !!page.directionFix,
+            through: !!page.through,
+            walkAnime: page.walkAnime !== false,
+            stepAnime: !!page.stepAnime,
+            locationName: String(profile.locationName || parsed.args.locationName || record.displayName || record.name),
+            openingLine: String(profile.openingLine || parsed.args.openingLine || ""),
+            personaPrompt: String(profile.personaPrompt || parsed.args.personaPrompt || ""),
+            questContext: String(profile.questContext || parsed.args.questContext || ""),
+            stateContext: String(profile.stateContext || parsed.args.stateContext || ""),
+            background: String(profile.background || ""),
+            role: String(profile.role || ""),
+            notes: String(profile.notes || ""),
+            trackedSwitchIds: normalizeIdList(profile.trackedSwitchIds ?? parsed.args.trackedSwitchIds),
+            trackedVariableIds: normalizeIdList(profile.trackedVariableIds ?? parsed.args.trackedVariableIds),
+            stages: Array.isArray(profile.stages) ? profile.stages : [],
+            inventory: Array.isArray(profile.inventory) ? profile.inventory : []
+        });
+    }
+    return results;
+}
+
+function parseAiNpcCommand(event) {
+    const page = Array.isArray(event?.pages) ? event.pages[0] : null;
+    const list = Array.isArray(page?.list) ? page.list : [];
+    const command = list.find(entry =>
+        entry?.code === 357 &&
+        Array.isArray(entry.parameters) &&
+        entry.parameters[0] === "AiNpcDialogueMZ" &&
+        entry.parameters[1] === "openNpcChat"
+    );
+    if (!command) {
+        return null;
+    }
+    return {
+        page,
+        command,
+        args: command.parameters[3] || {}
+    };
+}
+
+function normalizeNpcInput(npc) {
+    return {
+        id: String(npc?.id || "").trim(),
+        name: String(npc?.name || npc?.eventName || "NPC").trim() || "NPC",
+        mapId: Number(npc?.mapId || 0),
+        eventId: Number(npc?.eventId || 0),
+        x: Number(npc?.x || 0),
+        y: Number(npc?.y || 0),
+        characterName: String(npc?.characterName || ""),
+        characterIndex: Number(npc?.characterIndex || 0),
+        direction: Number(npc?.direction || 2),
+        pattern: Number(npc?.pattern || 1),
+        moveType: Number(npc?.moveType || 0),
+        moveSpeed: Number(npc?.moveSpeed || 3),
+        moveFrequency: Number(npc?.moveFrequency || 3),
+        trigger: Number(npc?.trigger || 0),
+        priorityType: Number(npc?.priorityType || 1),
+        directionFix: npc?.directionFix === true,
+        through: npc?.through === true,
+        walkAnime: npc?.walkAnime !== false,
+        stepAnime: npc?.stepAnime === true,
+        locationName: String(npc?.locationName || "").trim(),
+        openingLine: String(npc?.openingLine || ""),
+        personaPrompt: String(npc?.personaPrompt || ""),
+        questContext: String(npc?.questContext || ""),
+        stateContext: String(npc?.stateContext || ""),
+        background: String(npc?.background || ""),
+        role: String(npc?.role || ""),
+        notes: String(npc?.notes || ""),
+        trackedSwitchIds: normalizeIdList(npc?.trackedSwitchIds),
+        trackedVariableIds: normalizeIdList(npc?.trackedVariableIds)
+    };
+}
+
+function normalizeIdList(value) {
+    if (Array.isArray(value)) {
+        return value
+            .map(entry => Number(entry))
+            .filter(entry => Number.isInteger(entry) && entry > 0);
+    }
+    return String(value || "")
+        .split(",")
+        .map(entry => Number(entry.trim()))
+        .filter(entry => Number.isInteger(entry) && entry > 0);
+}
+
+function joinIdList(values) {
+    return normalizeIdList(values).join(",");
+}
+
+function updateAiNpcPluginCommand(event, args) {
+    const page = Array.isArray(event?.pages) ? event.pages[0] : null;
+    if (!page || !Array.isArray(page.list)) {
+        return;
+    }
+
+    const index = page.list.findIndex(entry =>
+        entry?.code === 357 &&
+        Array.isArray(entry.parameters) &&
+        entry.parameters[0] === "AiNpcDialogueMZ" &&
+        entry.parameters[1] === "openNpcChat"
+    );
+    if (index < 0) {
+        return;
+    }
+
+    const command = page.list[index];
+    command.parameters[3] = { ...command.parameters[3], ...args };
+
+    let endIndex = index + 1;
+    while (endIndex < page.list.length && page.list[endIndex]?.code === 657) {
+        endIndex += 1;
+    }
+
+    page.list.splice(index + 1, endIndex - (index + 1), ...createPluginCommandCommentLines(command.parameters[3], command.indent || 0));
+}
+
+function createPluginCommandCommentLines(args, indent) {
+    return Object.entries(args).map(([key, value]) => ({
+        code: 657,
+        indent,
+        parameters: [`${key} = ${value}`]
+    }));
 }

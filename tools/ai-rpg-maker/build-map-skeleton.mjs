@@ -86,7 +86,7 @@ for (const npc of plan.npcs || []) {
 }
 
 writeMapFile(dataDir, cityMapId, cityMap);
-mapInfos[cityMapId] = createMapInfo(cityMapId, String(plan.mapName || "New Map"), mapInfos);
+mapInfos[cityMapId] = createMapInfo(cityMapId, String(plan.mapName || "New Map"), mapInfos, 0);
 
 for (const building of plan.buildings || []) {
     const mapId = buildingMapIds.get(building.name);
@@ -123,7 +123,12 @@ for (const building of plan.buildings || []) {
     });
 
     writeMapFile(dataDir, mapId, interior);
-    mapInfos[mapId] = createMapInfo(mapId, String(building.interiorMapName || `${building.name} Interior`), mapInfos);
+    mapInfos[mapId] = createMapInfo(
+        mapId,
+        String(building.interiorMapName || `${building.name} Interior`),
+        mapInfos,
+        cityMapId
+    );
 }
 
 fs.writeFileSync(mapInfosPath, JSON.stringify(mapInfos, null, 2));
@@ -183,14 +188,14 @@ function createBlankMap({ width, height, tilesetId, displayName, note }) {
     };
 }
 
-function createMapInfo(id, name, mapInfos) {
+function createMapInfo(id, name, mapInfos, parentId) {
     const lastOrder = mapInfos.reduce((maxOrder, entry) => (entry && entry.order > maxOrder ? entry.order : maxOrder), 0);
     return {
         id,
         expanded: false,
         name,
         order: lastOrder + 1,
-        parentId: 0,
+        parentId: Number(parentId || 0),
         scrollX: 0,
         scrollY: 0
     };

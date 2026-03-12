@@ -102,7 +102,7 @@
       color: var(--muted);
     }
 
-    input[type="text"], textarea {
+    input[type="text"], input[type="number"], textarea, select {
       width: 100%;
       padding: 14px 16px;
       border: 1px solid var(--line);
@@ -114,7 +114,7 @@
       transition: transform 0.18s ease, border-color 0.18s ease;
     }
 
-    input[type="text"]:focus, textarea:focus {
+    input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
       transform: translateY(-1px);
       border-color: rgba(126, 79, 39, 0.45);
     }
@@ -351,6 +351,192 @@
       font-size: 13px;
     }
 
+    .studio {
+      padding: 20px;
+    }
+
+    .studio-shell {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 18px;
+      min-height: 620px;
+    }
+
+    .tree-panel, .detail-panel {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.68);
+      min-height: 0;
+    }
+
+    .tree-panel {
+      padding: 14px;
+      overflow: auto;
+    }
+
+    .detail-panel {
+      padding: 16px;
+    }
+
+    .tree-wrap {
+      display: grid;
+      gap: 10px;
+    }
+
+    .tree-folder {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.7);
+      overflow: hidden;
+    }
+
+    .tree-folder > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 700;
+    }
+
+    .tree-folder > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .tree-folder[open] > summary {
+      background: rgba(126, 79, 39, 0.08);
+    }
+
+    .tree-folder-body {
+      display: grid;
+      gap: 10px;
+      padding: 0 12px 12px 18px;
+    }
+
+    .tree-npc-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .tree-npc {
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.85);
+      color: var(--text);
+    }
+
+    .tree-npc.active {
+      background: rgba(126, 79, 39, 0.14);
+      border-color: rgba(126, 79, 39, 0.4);
+    }
+
+    .tree-meta {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .empty-state {
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.7;
+      padding: 24px;
+      border: 1px dashed var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.45);
+    }
+
+    .editor-shell {
+      display: grid;
+      gap: 14px;
+    }
+
+    .editor-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .editor-header p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .editor-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .editor-section {
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.72);
+      display: grid;
+      gap: 10px;
+    }
+
+    .editor-section textarea {
+      min-height: 120px;
+    }
+
+    .editor-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .editor-row-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .check-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .check-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.78);
+    }
+
+    .editor-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
     @media (max-width: 1120px) {
       .app {
         grid-template-columns: 1fr;
@@ -363,6 +549,10 @@
       .metrics, .grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .studio-shell {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 760px) {
@@ -372,6 +562,10 @@
       }
 
       .metrics, .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .editor-grid, .editor-row, .editor-row-3, .check-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -429,6 +623,7 @@
         <button id="undoBtn" class="ghost">Undo Last Apply</button>
         <button id="fillExampleBtn" class="ghost">Fill Example</button>
         <button id="loadBackupsBtn" class="ghost">Refresh Backups</button>
+        <button id="loadOverviewBtn" class="ghost">Load Project Overview</button>
       </div>
 
       <div id="status" class="status">Start with preview. Once the generated structure looks right, apply it into the target project.</div>
@@ -443,6 +638,23 @@
           <div class="metric"><strong id="metricNpcs">0</strong><span>NPCs</span></div>
           <div class="metric"><strong id="metricQuests">0</strong><span>Quests</span></div>
           <div class="metric"><strong id="metricItems">0</strong><span>Items</span></div>
+        </div>
+      </article>
+
+      <article class="panel studio">
+        <div class="card-head">
+          <h3>Project Explorer</h3>
+          <div id="overviewPills" class="badge-row"></div>
+        </div>
+        <div class="studio-shell">
+          <div class="tree-panel">
+            <div id="projectTree" class="tree-wrap">
+              <div class="empty-state">Load a project overview to browse maps, submaps, and NPCs like a directory tree.</div>
+            </div>
+          </div>
+          <div id="detailPanel" class="detail-panel">
+            <div class="empty-state">Select an NPC from the left tree to edit placement, initial movement, and profile details.</div>
+          </div>
         </div>
       </article>
 
@@ -510,6 +722,7 @@
       undoBtn: document.getElementById("undoBtn"),
       fillExampleBtn: document.getElementById("fillExampleBtn"),
       loadBackupsBtn: document.getElementById("loadBackupsBtn"),
+      loadOverviewBtn: document.getElementById("loadOverviewBtn"),
       status: document.getElementById("status"),
       heroTitle: document.getElementById("heroTitle"),
       heroText: document.getElementById("heroText"),
@@ -522,22 +735,28 @@
       contentPills: document.getElementById("contentPills"),
       diffPills: document.getElementById("diffPills"),
       backupPills: document.getElementById("backupPills"),
+      overviewPills: document.getElementById("overviewPills"),
       mapList: document.getElementById("mapList"),
       npcList: document.getElementById("npcList"),
       contentList: document.getElementById("contentList"),
       diffList: document.getElementById("diffList"),
       backupList: document.getElementById("backupList"),
-      applyLog: document.getElementById("applyLog")
+      applyLog: document.getElementById("applyLog"),
+      projectTree: document.getElementById("projectTree"),
+      detailPanel: document.getElementById("detailPanel")
     };
 
     let latestPreview = null;
     let latestBackups = [];
+    let latestOverview = null;
+    let selectedNpcKey = null;
 
     elements.previewBtn.addEventListener("click", onPreview);
     elements.applyBtn.addEventListener("click", onApply);
     elements.undoBtn.addEventListener("click", () => onUndo());
     elements.fillExampleBtn.addEventListener("click", fillExample);
     elements.loadBackupsBtn.addEventListener("click", loadBackups);
+    elements.loadOverviewBtn.addEventListener("click", onLoadOverview);
 
     function fillExample() {
       elements.prompt.value = "Create a royal capital with a palace in the north, tavern in the southwest, inn in the southeast, and the hero house on the east side. Add one main quest, two side quests, and key NPC dialogue that changes with story progress.";
@@ -599,6 +818,7 @@
           elements.applyLog.textContent += `\n\nBackup: ${result.backup.backupId}`;
         }
         await loadBackups();
+        await loadOverview(true);
         setStatus("Apply complete. Maps, AI profiles, quest events, and optional item data were written into the project.", "ok");
       } catch (error) {
         setStatus(error.message || String(error), "error");
@@ -623,6 +843,7 @@
         });
         elements.applyLog.textContent = JSON.stringify(result, null, 2);
         await loadBackups();
+        await loadOverview(true);
         setStatus("Backup restored. The last generated apply changes were rolled back.", "ok");
       } catch (error) {
         setStatus(error.message || String(error), "error");
@@ -640,6 +861,36 @@
       const result = await postJson("/pipeline/backups", { projectDir });
       latestBackups = result.backups || [];
       renderBackups(latestBackups);
+    }
+
+    async function onLoadOverview() {
+      setBusy(true);
+      setStatus("Loading project tree and NPC settings.", "");
+      try {
+        await loadOverview(false);
+        setStatus("Project overview loaded. Select an NPC from the tree to edit its settings.", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadOverview(preserveSelection) {
+      const projectDir = elements.projectDir.value.trim();
+      if (!projectDir) {
+        setPills(elements.overviewPills, []);
+        elements.projectTree.innerHTML = '<div class="empty-state">Enter a project directory first, then load its map and NPC overview.</div>';
+        elements.detailPanel.innerHTML = '<div class="empty-state">Select an NPC from the left tree to edit placement, initial movement, and profile details.</div>';
+        latestOverview = null;
+        return;
+      }
+
+      const previousKey = preserveSelection ? selectedNpcKey : null;
+      const result = await postJson("/project/overview", { projectDir });
+      latestOverview = result.overview || null;
+      selectedNpcKey = previousKey && findNpcByKey(previousKey) ? previousKey : null;
+      renderProjectOverview(latestOverview);
     }
 
     function collectPayload() {
@@ -786,6 +1037,386 @@ ${escapeHtml(categoryText || "")}</small>
       });
     }
 
+    function renderProjectOverview(overview) {
+      if (!overview) {
+        setPills(elements.overviewPills, []);
+        elements.projectTree.innerHTML = '<div class="empty-state">Load a project overview to browse maps, submaps, and NPCs like a directory tree.</div>';
+        elements.detailPanel.innerHTML = '<div class="empty-state">Select an NPC from the left tree to edit placement, initial movement, and profile details.</div>';
+        return;
+      }
+
+      setPills(elements.overviewPills, [
+        `${(overview.summary && overview.summary.maps) || 0} maps`,
+        `${(overview.summary && overview.summary.npcCount) || 0} NPCs`,
+        `${(overview.summary && overview.summary.profileCount) || 0} profiles`
+      ]);
+
+      elements.projectTree.innerHTML = "";
+      if (!overview.tree || overview.tree.length === 0) {
+        elements.projectTree.innerHTML = '<div class="empty-state">This project does not have any maps to browse yet.</div>';
+      } else {
+        overview.tree.forEach(node => {
+          elements.projectTree.appendChild(renderMapNode(node, 0));
+        });
+      }
+
+      const npc = findNpcByKey(selectedNpcKey);
+      if (npc) {
+        renderNpcEditor(npc);
+      } else {
+        elements.detailPanel.innerHTML = '<div class="empty-state">Select an NPC from the left tree to edit placement, initial movement, and profile details.</div>';
+      }
+    }
+
+    function renderMapNode(node, depth) {
+      const details = document.createElement("details");
+      details.className = "tree-folder";
+      details.open = depth === 0 || treeContainsSelected(node);
+
+      const summary = document.createElement("summary");
+      const title = document.createElement("div");
+      const count = document.createElement("div");
+      title.innerHTML = `<strong>${escapeHtml(node.label || "Map")}</strong><div class="tree-meta">${escapeHtml(node.displayName || "")}</div>`;
+      count.className = "tree-meta";
+      count.textContent = `${(node.children || []).length} submaps · ${(node.npcs || []).length} NPCs`;
+      summary.appendChild(title);
+      summary.appendChild(count);
+      details.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "tree-folder-body";
+
+      if (node.npcs && node.npcs.length > 0) {
+        const list = document.createElement("div");
+        list.className = "tree-npc-list";
+        node.npcs.forEach(npc => {
+          const button = document.createElement("button");
+          button.className = "tree-npc" + (npc.key === selectedNpcKey ? " active" : "");
+          button.innerHTML = `<strong>${escapeHtml(npc.name || npc.id || "NPC")}</strong><div class="tree-meta">NPC</div>`;
+          button.addEventListener("click", () => {
+            selectedNpcKey = npc.key;
+            renderProjectOverview(latestOverview);
+          });
+          list.appendChild(button);
+        });
+        body.appendChild(list);
+      }
+
+      (node.children || []).forEach(child => {
+        body.appendChild(renderMapNode(child, depth + 1));
+      });
+
+      if ((!node.children || node.children.length === 0) && (!node.npcs || node.npcs.length === 0)) {
+        const empty = document.createElement("div");
+        empty.className = "subtle";
+        empty.textContent = "No AI NPC entries found on this map yet.";
+        body.appendChild(empty);
+      }
+
+      details.appendChild(body);
+      return details;
+    }
+
+    function treeContainsSelected(node) {
+      if (!selectedNpcKey) {
+        return false;
+      }
+      if ((node.npcs || []).some(npc => npc.key === selectedNpcKey)) {
+        return true;
+      }
+      return (node.children || []).some(child => treeContainsSelected(child));
+    }
+
+    function findNpcByKey(key) {
+      if (!latestOverview || !Array.isArray(latestOverview.npcs) || !key) {
+        return null;
+      }
+      return latestOverview.npcs.find(npc => npc.key === key) || null;
+    }
+
+    function renderNpcEditor(npc) {
+      if (!npc) {
+        elements.detailPanel.innerHTML = '<div class="empty-state">Select an NPC from the left tree to edit placement, initial movement, and profile details.</div>';
+        return;
+      }
+
+      elements.detailPanel.innerHTML = `
+        <div class="editor-shell">
+          <div class="editor-header">
+            <div>
+              <h3>${escapeHtml(npc.name || "NPC")}</h3>
+              <p>${escapeHtml(npc.mapPath || "")}<br>${escapeHtml(npc.eventName || "")} · Event ${escapeHtml(npc.eventId || "")}</p>
+            </div>
+            <div class="editor-actions">
+              <button id="saveNpcBtn" class="secondary">Save NPC Settings</button>
+              <button id="reloadOverviewInlineBtn" class="ghost">Reload Tree</button>
+            </div>
+          </div>
+
+          <div class="editor-grid">
+            <section class="editor-section">
+              <h3>Identity</h3>
+              <div class="editor-row">
+                <div class="field">
+                  <label for="editorName">NPC Name</label>
+                  <input id="editorName" type="text" value="${escapeAttr(npc.name || "")}">
+                </div>
+                <div class="field">
+                  <label for="editorId">NPC ID</label>
+                  <input id="editorId" type="text" value="${escapeAttr(npc.id || "")}" readonly>
+                </div>
+              </div>
+              <div class="editor-row">
+                <div class="field">
+                  <label for="editorRole">Role</label>
+                  <input id="editorRole" type="text" value="${escapeAttr(npc.role || "")}" placeholder="mainQuest, vendor, guard">
+                </div>
+                <div class="field">
+                  <label for="editorLocation">Location Label</label>
+                  <input id="editorLocation" type="text" value="${escapeAttr(npc.locationName || "")}">
+                </div>
+              </div>
+              <div class="field">
+                <label for="editorBackground">Background</label>
+                <textarea id="editorBackground" placeholder="Who is this NPC? What is their past and motivation?">${escapeHtml(npc.background || "")}</textarea>
+              </div>
+              <div class="field">
+                <label for="editorNotes">Notes</label>
+                <textarea id="editorNotes" placeholder="Production notes, costume notes, speech habits, or quest reminders.">${escapeHtml(npc.notes || "")}</textarea>
+              </div>
+            </section>
+
+            <section class="editor-section">
+              <h3>Placement</h3>
+              <div class="editor-row-3">
+                <div class="field">
+                  <label for="editorMap">Map</label>
+                  <input id="editorMap" type="text" value="${escapeAttr(npc.mapPath || "")}" readonly>
+                </div>
+                <div class="field">
+                  <label for="editorX">X</label>
+                  <input id="editorX" type="number" value="${escapeAttr(npc.x)}">
+                </div>
+                <div class="field">
+                  <label for="editorY">Y</label>
+                  <input id="editorY" type="number" value="${escapeAttr(npc.y)}">
+                </div>
+              </div>
+              <div class="editor-row">
+                <div class="field">
+                  <label for="editorCharacterName">Character Sheet</label>
+                  <input id="editorCharacterName" type="text" value="${escapeAttr(npc.characterName || "")}" placeholder="People1">
+                </div>
+                <div class="field">
+                  <label for="editorCharacterIndex">Character Index</label>
+                  <input id="editorCharacterIndex" type="number" value="${escapeAttr(npc.characterIndex)}">
+                </div>
+              </div>
+              <div class="editor-row-3">
+                <div class="field">
+                  <label for="editorDirection">Direction</label>
+                  <select id="editorDirection">
+                    ${renderSelectOptions([
+                      [2, "Down"],
+                      [4, "Left"],
+                      [6, "Right"],
+                      [8, "Up"]
+                    ], npc.direction)}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="editorPattern">Pattern</label>
+                  <select id="editorPattern">
+                    ${renderSelectOptions([
+                      [0, "Left Frame"],
+                      [1, "Middle Frame"],
+                      [2, "Right Frame"]
+                    ], npc.pattern)}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="editorEventId">Event ID</label>
+                  <input id="editorEventId" type="text" value="${escapeAttr(npc.eventId)}" readonly>
+                </div>
+              </div>
+            </section>
+
+            <section class="editor-section">
+              <h3>Initial Action State</h3>
+              <div class="editor-row-3">
+                <div class="field">
+                  <label for="editorMoveType">Move Type</label>
+                  <select id="editorMoveType">
+                    ${renderSelectOptions([
+                      [0, "Fixed"],
+                      [1, "Random"],
+                      [2, "Approach"],
+                      [3, "Custom Route"]
+                    ], npc.moveType)}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="editorMoveSpeed">Move Speed</label>
+                  <input id="editorMoveSpeed" type="number" min="1" max="6" value="${escapeAttr(npc.moveSpeed)}">
+                </div>
+                <div class="field">
+                  <label for="editorMoveFrequency">Move Frequency</label>
+                  <input id="editorMoveFrequency" type="number" min="1" max="6" value="${escapeAttr(npc.moveFrequency)}">
+                </div>
+              </div>
+              <div class="editor-row">
+                <div class="field">
+                  <label for="editorTrigger">Trigger</label>
+                  <select id="editorTrigger">
+                    ${renderSelectOptions([
+                      [0, "Action Button"],
+                      [1, "Player Touch"],
+                      [2, "Event Touch"],
+                      [3, "Autorun"],
+                      [4, "Parallel"]
+                    ], npc.trigger)}
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="editorPriorityType">Draw Priority</label>
+                  <select id="editorPriorityType">
+                    ${renderSelectOptions([
+                      [0, "Below Characters"],
+                      [1, "Same As Characters"],
+                      [2, "Above Characters"]
+                    ], npc.priorityType)}
+                  </select>
+                </div>
+              </div>
+              <div class="check-grid">
+                ${renderCheckCard("editorDirectionFix", "Direction Fix", npc.directionFix)}
+                ${renderCheckCard("editorThrough", "Through", npc.through)}
+                ${renderCheckCard("editorWalkAnime", "Walk Animation", npc.walkAnime)}
+                ${renderCheckCard("editorStepAnime", "Step Animation", npc.stepAnime)}
+              </div>
+            </section>
+
+            <section class="editor-section">
+              <h3>Dialogue And Quest Context</h3>
+              <div class="field">
+                <label for="editorOpeningLine">Opening Line</label>
+                <textarea id="editorOpeningLine">${escapeHtml(npc.openingLine || "")}</textarea>
+              </div>
+              <div class="field">
+                <label for="editorPersonaPrompt">Persona Prompt</label>
+                <textarea id="editorPersonaPrompt">${escapeHtml(npc.personaPrompt || "")}</textarea>
+              </div>
+              <div class="field">
+                <label for="editorQuestContext">Quest Context</label>
+                <textarea id="editorQuestContext">${escapeHtml(npc.questContext || "")}</textarea>
+              </div>
+              <div class="field">
+                <label for="editorStateContext">State Context</label>
+                <textarea id="editorStateContext">${escapeHtml(npc.stateContext || "")}</textarea>
+              </div>
+            </section>
+
+            <section class="editor-section">
+              <h3>Tracked State</h3>
+              <div class="editor-row">
+                <div class="field">
+                  <label for="editorTrackedSwitchIds">Tracked Switch IDs</label>
+                  <input id="editorTrackedSwitchIds" type="text" value="${escapeAttr(toIdListText(npc.trackedSwitchIds))}" placeholder="1,3,12">
+                </div>
+                <div class="field">
+                  <label for="editorTrackedVariableIds">Tracked Variable IDs</label>
+                  <input id="editorTrackedVariableIds" type="text" value="${escapeAttr(toIdListText(npc.trackedVariableIds))}" placeholder="2,5,8">
+                </div>
+              </div>
+              <div class="subtle">These values are sent to the AI dialogue backend so the same NPC can react differently as the story advances.</div>
+            </section>
+          </div>
+        </div>
+      `;
+
+      document.getElementById("saveNpcBtn").addEventListener("click", onSaveNpc);
+      document.getElementById("reloadOverviewInlineBtn").addEventListener("click", () => loadOverview(true));
+    }
+
+    async function onSaveNpc() {
+      const projectDir = elements.projectDir.value.trim();
+      const npc = findNpcByKey(selectedNpcKey);
+      if (!projectDir || !npc) {
+        setStatus("Pick a project and select an NPC before saving.", "error");
+        return;
+      }
+
+      const payload = {
+        ...npc,
+        name: document.getElementById("editorName").value.trim(),
+        role: document.getElementById("editorRole").value.trim(),
+        locationName: document.getElementById("editorLocation").value.trim(),
+        background: document.getElementById("editorBackground").value,
+        notes: document.getElementById("editorNotes").value,
+        x: Number(document.getElementById("editorX").value || 0),
+        y: Number(document.getElementById("editorY").value || 0),
+        characterName: document.getElementById("editorCharacterName").value.trim(),
+        characterIndex: Number(document.getElementById("editorCharacterIndex").value || 0),
+        direction: Number(document.getElementById("editorDirection").value || 2),
+        pattern: Number(document.getElementById("editorPattern").value || 1),
+        moveType: Number(document.getElementById("editorMoveType").value || 0),
+        moveSpeed: Number(document.getElementById("editorMoveSpeed").value || 3),
+        moveFrequency: Number(document.getElementById("editorMoveFrequency").value || 3),
+        trigger: Number(document.getElementById("editorTrigger").value || 0),
+        priorityType: Number(document.getElementById("editorPriorityType").value || 1),
+        directionFix: document.getElementById("editorDirectionFix").checked,
+        through: document.getElementById("editorThrough").checked,
+        walkAnime: document.getElementById("editorWalkAnime").checked,
+        stepAnime: document.getElementById("editorStepAnime").checked,
+        openingLine: document.getElementById("editorOpeningLine").value,
+        personaPrompt: document.getElementById("editorPersonaPrompt").value,
+        questContext: document.getElementById("editorQuestContext").value,
+        stateContext: document.getElementById("editorStateContext").value,
+        trackedSwitchIds: parseIdListText(document.getElementById("editorTrackedSwitchIds").value),
+        trackedVariableIds: parseIdListText(document.getElementById("editorTrackedVariableIds").value)
+      };
+
+      setBusy(true);
+      setStatus("Saving NPC settings back into the project data and map event.", "");
+      try {
+        const result = await postJson("/project/npc/save", { projectDir, npc: payload });
+        latestOverview = result.overview || latestOverview;
+        renderProjectOverview(latestOverview);
+        setStatus("NPC settings saved. The profile file and event placement were updated.", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderSelectOptions(options, selectedValue) {
+      return options.map(([value, label]) => {
+        const selected = Number(value) === Number(selectedValue) ? " selected" : "";
+        return `<option value="${escapeAttr(value)}"${selected}>${escapeHtml(label)}</option>`;
+      }).join("");
+    }
+
+    function renderCheckCard(id, label, checked) {
+      return `
+        <label class="check-card" for="${escapeAttr(id)}">
+          <span>${escapeHtml(label)}</span>
+          <input id="${escapeAttr(id)}" type="checkbox"${checked ? " checked" : ""}>
+        </label>
+      `;
+    }
+
+    function toIdListText(values) {
+      return Array.isArray(values) ? values.join(",") : "";
+    }
+
+    function parseIdListText(value) {
+      return String(value || "")
+        .split(",")
+        .map(entry => Number(entry.trim()))
+        .filter(entry => Number.isInteger(entry) && entry > 0);
+    }
+
     function appendItem(container, title, body) {
       const node = document.createElement("div");
       node.className = "item";
@@ -811,12 +1442,17 @@ ${escapeHtml(categoryText || "")}</small>
         .replace(/"/g, "&quot;");
     }
 
+    function escapeAttr(text) {
+      return escapeHtml(text).replace(/'/g, "&#39;");
+    }
+
     function setBusy(isBusy) {
       elements.previewBtn.disabled = isBusy;
       elements.applyBtn.disabled = isBusy;
       elements.undoBtn.disabled = isBusy;
       elements.fillExampleBtn.disabled = isBusy;
       elements.loadBackupsBtn.disabled = isBusy;
+      elements.loadOverviewBtn.disabled = isBusy;
     }
 
     function setStatus(text, kind) {
